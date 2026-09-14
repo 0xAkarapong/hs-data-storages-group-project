@@ -1,0 +1,12 @@
+[project]
+name = "data-storage-bet"
+version = "0.0.1"
+requires-python = ">=3.12"
+authors = [
+    {name = "Palm"},
+    {name = "Arm"},
+    {name = "Drake"}
+]
+dependencies = [
+    "sqlalchemy>=2.0.52",
+]
