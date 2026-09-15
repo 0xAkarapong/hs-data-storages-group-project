@@ -9,28 +9,21 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from models import Base
 
-DEFAULT_URL = "postgresql+psycopg://app:app@localhost:5432/oltp_demo"
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DEFAULT_URL = os.getenv("DATABASE_URL")
 _engine = None
 SessionLocal: sessionmaker[Session] | None = None
 
 
-def init_engine(url: str = DEFAULT_URL, echo: bool = False):
-    """REPEATABLE READ + explicit row locks is our baseline isolation."""
+def init_engine(url: str = DEFAULT_URL, echo: bool = False, isolation_level: str = "READ COMMITTED"):
+    """ Initialize the SQLAlchemy engine and session factory. """
     global _engine, SessionLocal
-    if url.startswith("sqlite"):
-        _engine = create_engine(url, echo=echo, future=True)
-
-        @event.listens_for(_engine, "connect")
-        def _fk_on(dbapi_conn, _):
-            dbapi_conn.execute("PRAGMA foreign_keys=ON")
-            dbapi_conn.isolation_level = None  # we drive transactions ourselves
-
-        @event.listens_for(_engine, "begin")
-        def _begin_immediate(conn):
-            conn.exec_driver_sql("BEGIN IMMEDIATE")  # write lock from statement #1
-    else:
-        _engine = create_engine(url, echo=echo, future=True, pool_pre_ping=True,
-                                isolation_level="REPEATABLE READ")
+    _engine = create_engine(url, echo=echo, future=True, pool_pre_ping=True,
+                            isolation_level=isolation_level)  
     SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False, future=True)
     return _engine
 

@@ -58,6 +58,7 @@ class PaymentDirection(str, enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
+
     user_id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -71,10 +72,12 @@ class User(Base):
 
 class Plan(Base):
     __tablename__ = "plans"
+
     plan_id: Mapped[int] = mapped_column(primary_key=True)
     plan_name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     monthly_price: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     max_concurrent_streams: Mapped[int] = mapped_column(nullable=False, default=1)
+
     __table_args__ = (
         CheckConstraint("monthly_price >= 0", name="ck_plan_price_nonneg"),
         CheckConstraint("max_concurrent_streams > 0", name="ck_plan_streams_pos"),
