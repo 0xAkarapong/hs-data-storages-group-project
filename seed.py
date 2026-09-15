@@ -5,6 +5,12 @@ from db import create_tables, init_engine, tx
 from models import (EventStatus, OddsSnapshot, Outcome, Plan, SportsEvent, User)
 from operations import place_bet, purchase_subscription, register_user, start_streaming_session
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 def seed_reference_data():
     now = dt.datetime.now(dt.timezone.utc)
@@ -38,6 +44,6 @@ def seed_demo_flow():
 
 
 if __name__ == "__main__":
-    init_engine("postgresql+psycopg://app:app@localhost:5432/oltp_demo")
+    init_engine(DATABASE_URL)
     create_tables(drop_first=True)
     print(seed_demo_flow())
