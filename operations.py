@@ -77,7 +77,7 @@ def purchase_subscription(user_id: int, plan_id: int, payment_method: str,
         s.flush()
 
         pay = Payment(user_id=user_id, subscription_id=sub.subscription_id,
-                      amount=plan.monthly_price * months, currency="USD",
+                      amount=plan.monthly_price * months, currency="THB",
                       status=PaymentStatus.captured, direction=PaymentDirection.debit,
                       payment_method=payment_method, idempotency_key=idempotency_key)
         s.add(pay)
@@ -174,7 +174,7 @@ def place_bet(user_id: int, outcome_id: int, stake: Decimal,
         s.add(bet)
         s.flush()
 
-        pay = Payment(user_id=user_id, bet_id=bet.bet_id, amount=stake, currency="USD",
+        pay = Payment(user_id=user_id, bet_id=bet.bet_id, amount=stake, currency="THB",
                       status=PaymentStatus.captured, direction=PaymentDirection.debit,
                       payment_method="wallet", idempotency_key=idempotency_key)
         s.add(pay)
@@ -199,6 +199,10 @@ def settle_outcome(outcome_id: int, won: bool) -> dict:
         if outcome.status != OutcomeStatus.open:
             return {"settled": 0, "already_settled": True}
 
+        event = s.scalar(_lock(select(SportsEvent).where(SportsEvent.sports_event_id == outcome.sports_event_id)))
+        if event.status == EventStatus.cancelled:
+            return {"settled": 0, "already_settled": True, "event_cancelled": True}
+
         outcome.status = OutcomeStatus.won if won else OutcomeStatus.lost
 
         rows = s.execute(
@@ -215,12 +219,50 @@ def settle_outcome(outcome_id: int, won: bool) -> dict:
                 payout = (bet.amount_staked * price).quantize(Decimal("0.01"))
                 paid += payout
                 s.add(Payment(user_id=bet.user_id, bet_id=bet.bet_id, amount=payout,
-                              currency="USD", status=PaymentStatus.captured,
+                              currency="THB", status=PaymentStatus.captured,
                               direction=PaymentDirection.credit, payment_method="wallet",
                               idempotency_key=f"payout:{bet.bet_id}"))
             else:
                 bet.status = BetStatus.lost
         return {"settled": len(rows), "total_paid": paid, "already_settled": False}
+
+
+# ── OP 6 ───────────────────────────────────────────────────────────────────────
+@retry_on_conflict()
+def cancel_event(sports_event_id: int) -> dict:
+    """Cancel a SportsEvent: void every still-pending bet on its outcomes and refund the stake.
+    Concurrency:
+      • Lock outcomes before the event — same order as place_bet (outcome, then event) —
+        so a bet racing a cancellation either commits first or sees a closed event, never both.
+      • Idempotent: already-cancelled is a no-op; already-finished is rejected outright."""
+    with tx() as s:
+        outcomes = s.execute(_lock(
+            select(Outcome).where(Outcome.sports_event_id == sports_event_id)
+                            .order_by(Outcome.outcome_id))).scalars().all()
+        event = s.scalar(_lock(select(SportsEvent).where(SportsEvent.sports_event_id == sports_event_id)))
+        if not event:
+            raise BusinessError("no such event")
+        if event.status == EventStatus.cancelled:
+            return {"cancelled_now": False, "already_cancelled": True, "voided": 0, "refunded": Decimal("0.00")}
+        if event.status == EventStatus.finished:
+            raise BusinessError("event already finished, cannot cancel")
+
+        event.status = EventStatus.cancelled
+        outcome_ids = [o.outcome_id for o in outcomes]
+
+        rows = s.execute(
+            _lock(select(Bet).join(OddsSnapshot, Bet.snapshot_id == OddsSnapshot.snapshot_id)
+                  .where(OddsSnapshot.outcome_id.in_(outcome_ids), Bet.status == BetStatus.pending))
+        ).scalars().all()
+
+        refunded = Decimal("0.00")
+        for bet in rows:
+            bet.status = BetStatus.voided
+            refunded += bet.amount_staked
+            s.add(Payment(user_id=bet.user_id, bet_id=bet.bet_id, amount=bet.amount_staked,
+                          currency="THB", status=PaymentStatus.captured, direction=PaymentDirection.credit,
+                          payment_method="wallet", idempotency_key=f"void:{bet.bet_id}"))
+        return {"cancelled_now": True, "already_cancelled": False, "voided": len(rows), "refunded": refunded}
 
 
 # ── bonus: releases a "seat" ───────────────────────────────────────────────────

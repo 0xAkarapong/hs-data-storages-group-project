@@ -183,7 +183,7 @@ class Payment(Base):
     subscription_id: Mapped[int | None] = mapped_column(ForeignKey("subscriptions.subscription_id"))
     bet_id: Mapped[int | None] = mapped_column(ForeignKey("bets.bet_id"))
     amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
-    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="THB")
     status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus, name="payment_status"), nullable=False)
     direction: Mapped[PaymentDirection] = mapped_column(Enum(PaymentDirection, name="payment_direction"),
                                                         nullable=False, default=PaymentDirection.debit)
