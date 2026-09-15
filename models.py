@@ -19,27 +19,41 @@ class Base(DeclarativeBase):
 
 
 class EventStatus(str, enum.Enum):
-    scheduled = "scheduled"; live = "live"; finished = "finished"; cancelled = "cancelled"
+    scheduled = "scheduled"
+    live = "live"
+    finished = "finished"
+    cancelled = "cancelled"
 
 
 class OutcomeStatus(str, enum.Enum):
-    open = "open"; won = "won"; lost = "lost"
+    open = "open"
+    won = "won"
+    lost = "lost"
 
 
 class BetStatus(str, enum.Enum):
-    pending = "pending"; won = "won"; lost = "lost"; voided = "voided"
+    pending = "pending"
+    won = "won"
+    lost = "lost"
+    voided = "voided"
 
 
 class SubStatus(str, enum.Enum):
-    active = "active"; cancelled = "cancelled"; expired = "expired"
+    active = "active"
+    cancelled = "cancelled"
+    expired = "expired"
 
 
 class PaymentStatus(str, enum.Enum):
-    pending = "pending"; captured = "captured"; failed = "failed"; refunded = "refunded"
+    pending = "pending"
+    captured = "captured"
+    failed = "failed"
+    refunded = "refunded"
 
 
 class PaymentDirection(str, enum.Enum):
-    debit = "debit"; credit = "credit"
+    debit = "debit"
+    credit = "credit"
 
 
 class User(Base):

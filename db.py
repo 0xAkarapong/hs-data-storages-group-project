@@ -1,8 +1,10 @@
-import functools, random, time
+import functools
+import random
+import time
 from contextlib import contextmanager
 
 from sqlalchemy import create_engine, event
-from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
+from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from models import Base
@@ -70,5 +72,6 @@ def retry_on_conflict(attempts: int = 5, base_delay: float = 0.02):
                     if not transient or i == attempts - 1:
                         raise
                     time.sleep(base_delay * (2 ** i) + random.uniform(0, 0.01))
+            return None
         return wrapper
     return deco

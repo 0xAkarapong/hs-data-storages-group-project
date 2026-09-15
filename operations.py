@@ -1,5 +1,6 @@
 import datetime as dt
-import hashlib, os
+import hashlib
+import os
 from decimal import Decimal
 
 from sqlalchemy import func, select

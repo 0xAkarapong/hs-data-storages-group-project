@@ -1,11 +1,14 @@
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 
-from db import create_tables, init_engine, tx
-from models import Payment, StreamingSession
-from operations import BusinessError, place_bet, register_user, settle_outcome, start_streaming_session
-from seed import seed_demo_flow
 from sqlalchemy import func, select
+
+from db import create_tables, init_engine, tx
+from models import Payment
+from operations import (
+    BusinessError, place_bet, register_user, settle_outcome, start_streaming_session
+)
+from seed import seed_demo_flow
 
 
 def run(fn, n):
@@ -13,13 +16,16 @@ def run(fn, n):
         futs = [ex.submit(fn, i) for i in range(n)]
     ok, err = [], []
     for f in futs:
-        try: ok.append(f.result())
-        except BusinessError as e: err.append(str(e))
+        try:
+            ok.append(f.result())
+        except BusinessError as e:
+            err.append(str(e))
     return ok, err
 
 
 if __name__ == "__main__":
-    init_engine(); create_tables(drop_first=True)
+    init_engine()
+    create_tables(drop_first=True)
     ctx = seed_demo_flow()
 
     # A) 20 threads, same email → exactly 1 succeeds

@@ -1,0 +1,18 @@
+[MASTER]
+extension-pkg-whitelist=sqlalchemy
+
+[MESSAGES CONTROL]
+disable=
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    invalid-name,
+    too-few-public-methods,
+    global-statement,
+    redefined-outer-name,
+    line-too-long,
+    not-callable,
+    unsubscriptable-object
+
+[FORMAT]
+max-line-length=120

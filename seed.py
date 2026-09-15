@@ -2,7 +2,7 @@ import datetime as dt
 from decimal import Decimal
 
 from db import create_tables, init_engine, tx
-from models import (EventStatus, OddsSnapshot, Outcome, Plan, SportsEvent, User)
+from models import EventStatus, OddsSnapshot, Outcome, Plan, SportsEvent
 from operations import place_bet, purchase_subscription, register_user, start_streaming_session
 
 
@@ -16,10 +16,12 @@ def seed_reference_data():
         ])
         ev = SportsEvent(title="Lions vs Tigers", sport_type="football",
                          start_time=now + dt.timedelta(hours=2), status=EventStatus.live)
-        s.add(ev); s.flush()
+        s.add(ev)
+        s.flush()
         o1 = Outcome(sports_event_id=ev.sports_event_id, description="Lions win")
         o2 = Outcome(sports_event_id=ev.sports_event_id, description="Tigers win")
-        s.add_all([o1, o2]); s.flush()
+        s.add_all([o1, o2])
+        s.flush()
         s.add_all([
             OddsSnapshot(outcome_id=o1.outcome_id, captured_at=now - dt.timedelta(seconds=40), price=Decimal("2.10")),
             OddsSnapshot(outcome_id=o1.outcome_id, captured_at=now, price=Decimal("1.95")),
