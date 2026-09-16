@@ -156,7 +156,10 @@ def place_bet(user_id: int, outcome_id: int, stake: Decimal,
                         .order_by(OddsSnapshot.captured_at.desc()).limit(1))
         if not snap:
             raise BusinessError("no price available")
-        if dt.datetime.now(dt.timezone.utc) - snap.captured_at > MAX_ODDS_AGE:
+        captured_at = snap.captured_at
+        if captured_at.tzinfo is None:
+            captured_at = captured_at.replace(tzinfo=dt.timezone.utc)
+        if dt.datetime.now(dt.timezone.utc) - captured_at > MAX_ODDS_AGE:
             raise BusinessError("price is stale, refresh and retry")
 
         if streaming_session_id is not None:
