@@ -5,10 +5,26 @@
 I tested the `end_streaming_session()` operation.  The test closes **10,000**
 open sessions.
 
-**Prediction:** I expected about **1,000 requests per second** when closing one
-session at a time.  I expected the slow part to be opening and committing 10,000
-small database transactions.  Each call also does a `SELECT` before its
-`UPDATE`.
+**Prediction:**
+From `operations.streaming`
+
+```python
+def end_streaming_session(session_id: int) -> bool:
+    with tx() as s:
+        sess = s.scalar(lock(select(StreamingSession)
+                              .where(StreamingSession.session_id == session_id)))
+        if not sess or sess.ended_at is not None:
+            return False
+        sess.ended_at = dt.datetime.now(dt.timezone.utc)
+        return True
+```
+
+we can see this function does 3 round-trip: `SELECT`, `UPDATE` and `COMMIT`
+Assume 5 ms per round-trip: 
+    1000ms / 5ms = 200 round-trip per second
+    one request use 3 round trip:
+        1 second = 200 / 3 = 67 requests per second
+
 
 ## What I changed
 
