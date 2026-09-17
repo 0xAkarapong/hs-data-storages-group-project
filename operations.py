@@ -3,7 +3,7 @@ import hashlib
 import os
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from db import retry_on_conflict, tx
@@ -275,3 +275,19 @@ def end_streaming_session(session_id: int) -> bool:
             return False
         sess.ended_at = dt.datetime.now(dt.timezone.utc)
         return True
+
+
+# ── faster batch version of the close operation ────────────────────────────────
+def end_streaming_sessions_bulk(session_ids: list[int]) -> int:
+    """Close all open sessions in one transaction and return how many were closed."""
+    if not session_ids:
+        return 0
+
+    with tx() as s:
+        result = s.execute(
+            update(StreamingSession)
+            .where(StreamingSession.session_id.in_(session_ids),
+                   StreamingSession.ended_at.is_(None))
+            .values(ended_at=dt.datetime.now(dt.timezone.utc))
+        )
+        return result.rowcount

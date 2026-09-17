@@ -16,7 +16,12 @@ load_dotenv()
 
 MONEY = Numeric(12, 2)
 ODDS = Numeric(8, 3)
-SCHEMA_NAME = os.getenv("SCHEMA_NAME")
+SCHEMA_NAME = os.getenv("SCHEMA_NAME") or None
+
+
+def _foreign_key_target(table: str, column: str) -> str:
+    """Build a valid FK target with or without an optional database schema."""
+    return f"{SCHEMA_NAME}.{table}.{column}" if SCHEMA_NAME else f"{table}.{column}"
 
 
 class Base(DeclarativeBase):
@@ -95,8 +100,8 @@ class Subscription(Base):
     __tablename__ = "subscriptions"
 
     subscription_id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey(f"{SCHEMA_NAME}.users.user_id", ondelete="CASCADE"), nullable=False)
-    plan_id: Mapped[int] = mapped_column(ForeignKey(f"{SCHEMA_NAME}.plans.plan_id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey(_foreign_key_target("users", "user_id"), ondelete="CASCADE"), nullable=False)
+    plan_id: Mapped[int] = mapped_column(ForeignKey(_foreign_key_target("plans", "plan_id")), nullable=False)
     status: Mapped[SubStatus] = mapped_column(Enum(SubStatus, name="sub_status", inherit_schema=True), nullable=False)
     start_date: Mapped[dt.date] = mapped_column(Date, nullable=False)
     end_date: Mapped[dt.date | None] = mapped_column(Date)
@@ -128,7 +133,7 @@ class SportsEvent(Base):
 class Outcome(Base):
     __tablename__ = "outcomes"
     outcome_id: Mapped[int] = mapped_column(primary_key=True)
-    sports_event_id: Mapped[int] = mapped_column(ForeignKey(f"{SCHEMA_NAME}.sports_events.sports_event_id"), nullable=False)
+    sports_event_id: Mapped[int] = mapped_column(ForeignKey(_foreign_key_target("sports_events", "sports_event_id")), nullable=False)
     description: Mapped[str] = mapped_column(String(200), nullable=False)
     status: Mapped[OutcomeStatus] = mapped_column(Enum(OutcomeStatus, name="outcome_status", inherit_schema=True),
                                                   nullable=False, default=OutcomeStatus.open)
@@ -143,7 +148,7 @@ class Outcome(Base):
 class OddsSnapshot(Base):
     __tablename__ = "odds_snapshots"
     snapshot_id: Mapped[int] = mapped_column(primary_key=True)
-    outcome_id: Mapped[int] = mapped_column(ForeignKey(f"{SCHEMA_NAME}.outcomes.outcome_id"), nullable=False)
+    outcome_id: Mapped[int] = mapped_column(ForeignKey(_foreign_key_target("outcomes", "outcome_id")), nullable=False)
     captured_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     price: Mapped[Decimal] = mapped_column(ODDS, nullable=False)
 
@@ -159,9 +164,9 @@ class OddsSnapshot(Base):
 class StreamingSession(Base):
     __tablename__ = "streaming_sessions"
     session_id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey(f"{SCHEMA_NAME}.users.user_id"), nullable=False)
-    sports_event_id: Mapped[int] = mapped_column(ForeignKey(f"{SCHEMA_NAME}.sports_events.sports_event_id"), nullable=False)
-    subscription_id: Mapped[int] = mapped_column(ForeignKey(f"{SCHEMA_NAME}.subscriptions.subscription_id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey(_foreign_key_target("users", "user_id")), nullable=False)
+    sports_event_id: Mapped[int] = mapped_column(ForeignKey(_foreign_key_target("sports_events", "sports_event_id")), nullable=False)
+    subscription_id: Mapped[int] = mapped_column(ForeignKey(_foreign_key_target("subscriptions", "subscription_id")), nullable=False)
     started_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     ended_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -176,9 +181,9 @@ class StreamingSession(Base):
 class Bet(Base):
     __tablename__ = "bets"
     bet_id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey(f"{SCHEMA_NAME}.users.user_id"), nullable=False)
-    snapshot_id: Mapped[int] = mapped_column(ForeignKey(f"{SCHEMA_NAME}.odds_snapshots.snapshot_id"), nullable=False)
-    streaming_session_id: Mapped[int | None] = mapped_column(ForeignKey(f"{SCHEMA_NAME}.streaming_sessions.session_id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey(_foreign_key_target("users", "user_id")), nullable=False)
+    snapshot_id: Mapped[int] = mapped_column(ForeignKey(_foreign_key_target("odds_snapshots", "snapshot_id")), nullable=False)
+    streaming_session_id: Mapped[int | None] = mapped_column(ForeignKey(_foreign_key_target("streaming_sessions", "session_id")))
     amount_staked: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     status: Mapped[BetStatus] = mapped_column(Enum(BetStatus, name="bet_status", inherit_schema=True),
                                               nullable=False, default=BetStatus.pending)
@@ -196,9 +201,9 @@ class Bet(Base):
 class Payment(Base):
     __tablename__ = "payments"
     payment_id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey(f"{SCHEMA_NAME}.users.user_id"), nullable=False)
-    subscription_id: Mapped[int | None] = mapped_column(ForeignKey(f"{SCHEMA_NAME}.subscriptions.subscription_id"))
-    bet_id: Mapped[int | None] = mapped_column(ForeignKey(f"{SCHEMA_NAME}.bets.bet_id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey(_foreign_key_target("users", "user_id")), nullable=False)
+    subscription_id: Mapped[int | None] = mapped_column(ForeignKey(_foreign_key_target("subscriptions", "subscription_id")))
+    bet_id: Mapped[int | None] = mapped_column(ForeignKey(_foreign_key_target("bets", "bet_id")))
     amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="THB")
     status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus, name="payment_status", inherit_schema=True), nullable=False)
