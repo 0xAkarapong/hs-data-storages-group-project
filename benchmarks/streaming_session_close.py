@@ -15,7 +15,7 @@ from sqlalchemy import insert
 
 from db import create_tables, init_engine, tx
 from models import EventStatus, Plan, SportsEvent, StreamingSession, SubStatus, Subscription, User
-from operations import end_streaming_session, end_streaming_sessions_bulk
+from operations.streaming import end_streaming_session, end_streaming_sessions_bulk
 
 SESSION_COUNT = 10_000
 

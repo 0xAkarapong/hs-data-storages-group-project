@@ -51,6 +51,15 @@ def tx():
         s.close()
 
 
+class BusinessError(Exception):
+    """Rule violation — caller's fault, never retried."""
+
+
+def lock(stmt):
+    """FOR UPDATE on PostgreSQL; harmless no-op on SQLite (BEGIN IMMEDIATE already serializes)."""
+    return stmt.with_for_update()
+
+
 RETRYABLE_SQLSTATES = {"40001", "40P01"}  # serialization_failure, deadlock_detected
 
 

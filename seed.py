@@ -4,7 +4,10 @@ import random
 
 from db import create_tables, init_engine, tx
 from models import EventStatus, OddsSnapshot, Outcome, Plan, SportsEvent
-from operations import place_bet, purchase_subscription, register_user, start_streaming_session
+from operations.auth import register_user
+from operations.betting import place_bet
+from operations.billing import purchase_subscription
+from operations.streaming import start_streaming_session
 
 
 import os

@@ -9,7 +9,7 @@ from sqlalchemy import select
 from benchmarks.streaming_session_close import seed_sessions
 from db import create_tables, init_engine, tx
 from models import StreamingSession
-from operations import end_streaming_sessions_bulk
+from operations.streaming import end_streaming_sessions_bulk
 
 
 def test_bulk_close_transitions_only_open_unique_sessions():

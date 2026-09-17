@@ -1,13 +1,17 @@
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sqlalchemy import func, select
 
-from db import create_tables, init_engine, tx
+from db import BusinessError, create_tables, init_engine, tx
 from models import Payment
-from operations import (
-    BusinessError, place_bet, register_user, settle_outcome, start_streaming_session
-)
+from operations.auth import register_user
+from operations.betting import place_bet, settle_outcome
+from operations.streaming import start_streaming_session
 from seed import seed_demo_flow
 
 
