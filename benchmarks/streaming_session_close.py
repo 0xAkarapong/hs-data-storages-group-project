@@ -17,6 +17,12 @@ from db import create_tables, init_engine, tx
 from models import EventStatus, Plan, SportsEvent, StreamingSession, SubStatus, Subscription, User
 from operations.streaming import end_streaming_session, end_streaming_sessions_bulk
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
 SESSION_COUNT = 10_000
 
 
@@ -55,21 +61,20 @@ def measure(name, close_sessions, session_ids):
 
 
 def main():
-    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as database:
-        database_path = database.name
-    try:
-        init_engine(f"sqlite+pysqlite:///{database_path}")
-        create_tables(drop_first=True)
-        session_ids = seed_sessions()
-        one_by_one = measure("one at a time", lambda ids: sum(
-            end_streaming_session(session_id) for session_id in ids), session_ids)
+    init_engine(DATABASE_URL, echo=True)
 
-        create_tables(drop_first=True)
-        session_ids = seed_sessions()
-        batch = measure("batch", end_streaming_sessions_bulk, session_ids)
-        print(f"speedup: {batch / one_by_one:.1f}x")
-    finally:
-        Path(database_path).unlink(missing_ok=True)
+    # one by one test
+    create_tables(drop_first=True)
+    session_ids = seed_sessions()
+    one_by_one = measure("one at a time", lambda ids: sum(
+        end_streaming_session(session_id) for session_id in ids), session_ids
+    )
+
+    # batch test
+    create_tables(drop_first=True)
+    session_ids = seed_sessions()
+    batch = measure("batch", end_streaming_sessions_bulk, session_ids)
+    print(f"speedup: {batch / one_by_one:.1f}x")
 
 
 if __name__ == "__main__":
