@@ -13,9 +13,10 @@ sync: install ## Alias for install.
 run: ## Seed the database with the demo flow (requires DATABASE_URL).
 	uv run python seed.py
 
-test: ## Run PostgreSQL-backed assertion scripts (requires a running database).
+test: ## Run the PostgreSQL-backed test suite (requires a running database).
 	uv run python tests/test_cancel_event.py
 	uv run python tests/test_concurrency.py
+	uv run pytest tests/test_isolation.py
 
 build: ## Build source and wheel distributions.
 	uv build

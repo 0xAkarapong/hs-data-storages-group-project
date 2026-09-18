@@ -14,20 +14,20 @@ from seed import seed_demo_flow
 if __name__ == "__main__":
     init_engine()
     create_tables(drop_first=True)
-    ctx = seed_demo_flow()  # already places one $25 pending bet on outcome_id
+    ctx = seed_demo_flow()  # already places one $2,500 pending bet on outcome_id
 
     with tx() as s:
         bet_id = s.scalar(select(Bet.bet_id).where(Bet.user_id == ctx["user_id"]))
 
     # cancelling the event voids the pending bet and refunds the stake
     r1 = cancel_event(ctx["event_id"])
-    assert r1 == {"cancelled_now": True, "already_cancelled": False, "voided": 1, "refunded": Decimal("25.00")}, r1
+    assert r1 == {"cancelled_now": True, "already_cancelled": False, "voided": 1, "refunded": Decimal("2500.00")}, r1
 
     with tx() as s:
         assert s.get(Bet, bet_id).status == BetStatus.voided
         assert s.get(SportsEvent, ctx["event_id"]).status == EventStatus.cancelled
         refund = s.scalar(select(Payment).where(Payment.idempotency_key == f"void:{bet_id}"))
-        assert refund is not None and refund.amount == Decimal("25.00")
+        assert refund is not None and refund.amount == Decimal("2500.00")
         assert s.get(Outcome, ctx["outcome_id"]).status.value == "open"  # Outcome has no cancelled state
 
     # cancelling twice is a no-op, not a double refund
