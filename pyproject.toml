@@ -13,6 +13,16 @@ dependencies = [
     "sqlalchemy>=2.0.52",
 ]
 
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["db", "models", "seed"]
+
+[tool.setuptools.packages.find]
+include = ["operations*"]
+
 [dependency-groups]
 dev = [
     "psycopg[binary]>=3.3.5",
