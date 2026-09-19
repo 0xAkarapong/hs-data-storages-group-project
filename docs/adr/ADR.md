@@ -56,3 +56,52 @@ batch version sends one update instead of 10,000 select/update/commit cycles.
 This result is from local SQLite, so the exact RPS will be different on
 PostgreSQL, but the reason for the improvement is the same: fewer database
 round-trips and commits.
+
+# Isolation test: concurrent stream double-booking
+
+## Anomaly before the fix
+
+`start_streaming_session()` must keep the number of open sessions at or below
+the subscription plan's limit. The broken version performs a check-then-insert
+at PostgreSQL's `READ COMMITTED` level without locking a shared row. If several
+transactions read "1 of 2 slots used" before any insert commits, every one can
+insert a different `streaming_sessions` row. This is a write-skew/double-booking
+anomaly: each transaction is locally valid, but the committed rows violate the
+business invariant.
+
+Run the intentionally broken operation with:
+
+```bash
+make isolation-break
+```
+
+The transactions synchronize after reading the count to make the real race
+repeatable. The command prints the plan limit and every open session row, then
+fails its invariant assertion because the corrupted count is greater than the
+limit.
+
+## Fix
+
+The production operation selects the user's `subscriptions` row with `FOR
+UPDATE` before counting and inserting. That row is the serialization point:
+only one transaction for a subscription can check and claim a slot at a time.
+The waiting transactions re-count after the winner commits and reject the
+request when the limit has been reached.
+
+Run the same invariant against the fixed operation with:
+
+```bash
+make isolation-fixed
+```
+
+Both demonstrations use `READ COMMITTED`; the corrected result comes from the
+explicit lock rather than hiding the anomaly by switching to `SERIALIZABLE`.
+
+## Cost of the fix
+
+Session starts for the same subscription now execute sequentially while the
+lock is held. This adds lock-wait latency and limits per-subscription throughput
+to roughly one start transaction at a time. Deadlocks are also possible if a
+future operation takes the same locks in a different order, so lock ordering
+must remain consistent and transient deadlocks are retried. Users on different
+subscriptions lock different rows and can still start streams concurrently.

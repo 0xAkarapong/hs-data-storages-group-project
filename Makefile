@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install sync run test build db-up db-down benchmark clean
+.PHONY: help install sync run test isolation-break isolation-fixed build db-up db-down benchmark clean
 
 help: ## Show available commands.
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -16,7 +16,13 @@ run: ## Seed the database with the demo flow (requires DATABASE_URL).
 test: ## Run the PostgreSQL-backed test suite (requires a running database).
 	uv run python tests/test_cancel_event.py
 	uv run python tests/test_concurrency.py
-	uv run pytest tests/test_isolation.py
+	uv run python tests/test_isolation.py fixed
+
+isolation-break: ## Demonstrate stream-limit corruption (expected to fail).
+	uv run python tests/test_isolation.py unsafe
+
+isolation-fixed: ## Verify locking prevents stream-limit corruption.
+	uv run python tests/test_isolation.py fixed
 
 build: ## Build source and wheel distributions.
 	uv build

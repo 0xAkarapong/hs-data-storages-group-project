@@ -14,14 +14,17 @@ def purchase_subscription(user_id: int, plan_id: int, payment_method: str,
       • idempotency_key UNIQUE → a retried/duplicated request never double-charges.
       • Row lock on the user + partial unique index → never two active subscriptions."""
     with tx() as s:
-        existing = s.scalar(select(Payment).where(Payment.idempotency_key == idempotency_key))
-        if existing:                                    # replay of a request we already processed
-            return {"subscription_id": existing.subscription_id,
-                    "payment_id": existing.payment_id, "replayed": True}
-
         user = s.scalar(lock(select(User).where(User.user_id == user_id)))
         if not user:
             raise BusinessError("no such user")
+
+        # Re-check after acquiring the lock so a request that waited for an
+        # identical purchase observes the payment committed by the winner.
+        existing = s.scalar(select(Payment).where(Payment.idempotency_key == idempotency_key))
+        if existing:
+            return {"subscription_id": existing.subscription_id,
+                    "payment_id": existing.payment_id, "replayed": True}
+
         plan = s.scalar(select(Plan).where(Plan.plan_id == plan_id))
         if not plan:
             raise BusinessError("no such plan")

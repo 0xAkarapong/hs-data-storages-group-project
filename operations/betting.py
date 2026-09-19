@@ -25,12 +25,14 @@ def place_bet(user_id: int, outcome_id: int, stake: Decimal,
         raise BusinessError("stake must be positive")
 
     with tx() as s:
+        if not s.scalar(lock(select(User).where(User.user_id == user_id))):
+            raise BusinessError("no such user")
+
+        # Check only after taking the per-user lock. A concurrent request may have
+        # committed this key while we were waiting for the lock.
         prior = s.scalar(select(Payment).where(Payment.idempotency_key == idempotency_key))
         if prior:
             return {"bet_id": prior.bet_id, "payment_id": prior.payment_id, "replayed": True}
-
-        if not s.scalar(lock(select(User).where(User.user_id == user_id))):
-            raise BusinessError("no such user")
 
         outcome = s.scalar(lock(select(Outcome).where(Outcome.outcome_id == outcome_id)))
         if not outcome or outcome.status != OutcomeStatus.open:
