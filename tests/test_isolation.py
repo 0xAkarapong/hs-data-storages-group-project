@@ -41,6 +41,7 @@ def start_streaming_session_without_lock(
 
         plan = session.get(Plan, subscription.plan_id)
         event = session.get(SportsEvent, sports_event_id)
+
         if not event or event.status not in (EventStatus.scheduled, EventStatus.live):
             raise BusinessError("event not streamable")
 
@@ -56,29 +57,30 @@ def start_streaming_session_without_lock(
         if open_streams >= plan.max_concurrent_streams:
             raise BusinessError("concurrent stream limit reached")
 
+        # Start join the stream. This is the point where the race condition can cause double-booking.
         streaming_session = StreamingSession(
             user_id=user_id,
             sports_event_id=sports_event_id,
             subscription_id=subscription.subscription_id,
             started_at=dt.datetime.now(dt.timezone.utc),
         )
+
         session.add(streaming_session)
         session.flush()
         return streaming_session.session_id
 
 
 def run_concurrently(mode: str, user_id: int, event_id: int):
-    start_together = Barrier(WORKERS)
-    all_counts_read = Barrier(WORKERS)
+    barrier = Barrier(WORKERS)
 
     def invoke(_):
         try:
             if mode == "unsafe":
                 return start_streaming_session_without_lock(
-                    user_id, event_id, all_counts_read
+                    user_id, event_id, barrier
                 )
 
-            start_together.wait(timeout=10)
+            barrier.wait(timeout=10)
             return start_streaming_session(user_id, event_id)
         except BusinessError as exc:
             return str(exc)
@@ -87,48 +89,62 @@ def run_concurrently(mode: str, user_id: int, event_id: int):
         return list(executor.map(invoke, range(WORKERS)))
 
 
-def assert_stream_limit(mode: str):
-    database_url = os.getenv("DATABASE_URL")
-    if not database_url:
-        raise RuntimeError("DATABASE_URL is not configured")
-
+def _prepare_database(database_url: str) -> dict:
     init_engine(database_url, isolation_level="READ COMMITTED")
     create_tables(drop_first=True)
-    context = seed_demo_flow()  # Standard plan: limit 2, with 1 session open.
+    return seed_demo_flow()  # Standard plan: limit 2, with 1 session open.
 
-    results = run_concurrently(mode, context["user_id"], context["event_id"])
 
+def _load_open_sessions(user_id: int):
+    """Plan limit plus every still-open streaming session for that user."""
     with tx() as session:
         subscription = session.scalar(select(Subscription).where(
-            Subscription.user_id == context["user_id"],
+            Subscription.user_id == user_id,
             Subscription.status == SubStatus.active,
         ))
+
         plan = session.get(Plan, subscription.plan_id)
         rows = session.scalars(select(StreamingSession).where(
             StreamingSession.subscription_id == subscription.subscription_id,
             StreamingSession.ended_at.is_(None),
         ).order_by(StreamingSession.session_id)).all()
 
-        print(f"mode: {mode}")
-        print(f"plan limit: {plan.max_concurrent_streams}")
-        print(f"open sessions: {len(rows)}")
-        print(f"worker results: {results}")
-        for row in rows:
-            label = "corrupted row:" if len(rows) > plan.max_concurrent_streams else "session row:"
-            print(label, {
-                "session_id": row.session_id,
-                "subscription_id": row.subscription_id,
-                "ended_at": row.ended_at,
-            })
+        return plan, rows
 
-        assert len(rows) <= plan.max_concurrent_streams, (
-            f"double-booking: plan permits {plan.max_concurrent_streams} open "
-            f"sessions but database contains {len(rows)}"
-        )
+
+def _report(mode: str, plan: Plan, rows: list[StreamingSession], results: list):
+    over_limit = len(rows) > plan.max_concurrent_streams
+    print(f"mode: {mode}")
+    print(f"plan limit: {plan.max_concurrent_streams}")
+    print(f"open sessions: {len(rows)}")
+    print(f"worker results: {results}")
+    for row in rows:
+        label = "corrupted row:" if over_limit else "session row:"
+        print(label, {
+            "session_id": row.session_id,
+            "subscription_id": row.subscription_id,
+            "ended_at": row.ended_at,
+        })
+
+
+def assert_stream_limit(mode: str):
+    context = _prepare_database(os.getenv("DATABASE_URL"))
+
+    results = run_concurrently(mode, context["user_id"], context
+    ["event_id"])
+    plan, rows = _load_open_sessions(context["user_id"])
+
+    _report(mode, plan, rows, results)
+
+    assert len(rows) <= plan.max_concurrent_streams, (
+        f"double-booking: plan permits {plan.max_concurrent_streams} open "
+        f"sessions but database contains {len(rows)}"
+    )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("unsafe", "fixed"))
     arguments = parser.parse_args()
+
     assert_stream_limit(arguments.mode)
