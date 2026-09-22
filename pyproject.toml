@@ -10,6 +10,7 @@ authors = [
 dependencies = [
     "psycopg>=3.3.5",
     "python-dotenv>=1.2.3",
+    "redis>=5.0.0",
     "sqlalchemy>=2.0.52",
 ]
 
@@ -18,7 +19,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["db", "models", "seed"]
+py-modules = ["db", "models", "seed", "redis_client"]
 
 [tool.setuptools.packages.find]
 include = ["operations*"]

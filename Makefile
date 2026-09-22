@@ -17,6 +17,7 @@ test: ## Run the PostgreSQL-backed test suite (requires a running database).
 	uv run python tests/test_cancel_event.py
 	uv run python tests/test_concurrency.py
 	uv run python tests/test_isolation.py fixed
+	uv run python tests/test_record_ping.py
 
 isolation-break: ## Demonstrate stream-limit corruption (expected to fail).
 	uv run python tests/test_isolation.py unsafe

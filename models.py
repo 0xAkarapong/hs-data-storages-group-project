@@ -127,6 +127,10 @@ class SportsEvent(Base):
     start_time: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[EventStatus] = mapped_column(Enum(EventStatus, name="event_status", inherit_schema=True),
                                                 nullable=False, default=EventStatus.scheduled)
+
+    # Total Pings ever received
+    ping_count: Mapped[int] = mapped_column(nullable=False, default=0, server_default=text("0"))
+
     outcomes: Mapped[list["Outcome"]] = relationship(back_populates="event")
 
 
