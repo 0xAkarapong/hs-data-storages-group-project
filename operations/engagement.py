@@ -1,9 +1,10 @@
 from sqlalchemy import select, update
 
-from db import BusinessError, tx
+from db import BusinessError, retry_on_conflict, tx
 from models import OddsSnapshot, Outcome, SportsEvent, StreamingSession
 
 
+@retry_on_conflict()
 def record_ping(streaming_session_id: int) -> dict:
     """
     Update the ping count using OLTP database
