@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install sync run test isolation-break isolation-fixed build db-up db-down benchmark clean
+.PHONY: help install sync run test isolation-break isolation-fixed build db-up db-down redis-up benchmark benchmark-redis clean
 
 help: ## Show available commands.
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -31,11 +31,17 @@ build: ## Build source and wheel distributions.
 db-up: ## Start PostgreSQL using docker compose.
 	docker compose up -d db
 
-db-down: ## Stop the PostgreSQL container.
+db-down: ## Stop the Postgres and Redis containers.
 	docker compose down
+
+redis-up: ## Start Redis using docker compose.
+	docker compose up -d redis
 
 benchmark: ## Benchmark bulk session closing (requires DATABASE_URL).
 	uv run python benchmarks/streaming_session_close.py
+
+benchmark-redis: ## Benchmark Redis's raw INCR ceiling (requires REDIS_URL / redis-up).
+	uv run python benchmarks/redis_ping_baseline.py
 
 clean: ## Remove generated Python build artifacts.
 	@find . -type d \( -name __pycache__ -o -name .pytest_cache \) -prune -exec rm -rf {} +

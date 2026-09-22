@@ -1,0 +1,41 @@
+"""Redis's raw INCR ceiling — HW3 task 1 (NoSQL base performance).
+
+A fresh key each call, so each INCR is genuinely a new record, not a
+repeated increment on one hot key — that contention story is task 2-3's,
+not this one. This number is a floor, not Redis's actual ceiling: one
+client, one connection, no pipelining — concurrency would move it up.
+
+Keys live under bench:event:*:pings, a namespace distinct from the
+event:{sports_event_id}:pings keys the real record_ping() will use, so
+this never collides with (or gets confused for) real ping counts.
+
+Run from the project root: python benchmarks/redis_ping_baseline.py
+"""
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from redis_client import init_redis
+
+PING_COUNT = 10_000
+
+
+def main():
+    r = init_redis()
+    r.ping()  # warm the connection before timing
+    for key in r.scan_iter("bench:event:*:pings"):
+        r.delete(key)
+
+    started = time.perf_counter()
+    for event_id in range(PING_COUNT):
+        assert r.incr(f"bench:event:{event_id}:pings") == 1
+    seconds = time.perf_counter() - started
+
+    rps = PING_COUNT / seconds
+    print(f"redis incr, new key per call: {seconds:.3f}s, {rps:,.0f} incr/s")
+
+
+if __name__ == "__main__":
+    main()
