@@ -19,10 +19,10 @@ _engine = None
 SessionLocal: sessionmaker[Session] | None = None
 
 
-def init_engine(url: str = DEFAULT_URL, echo: bool = False, isolation_level: str = "READ COMMITTED"):
+def init_engine(url: str = DEFAULT_URL, echo: bool = False, isolation_level: str = "READ COMMITTED", **pool_options):
     """ Initialize the SQLAlchemy engine and session factory. """
     global _engine, SessionLocal
-    engine_options = {"echo": echo, "future": True, "pool_pre_ping": True}
+    engine_options = {"echo": echo, "future": True, "pool_pre_ping": True, **pool_options}
     # SQLite does not accept PostgreSQL's READ COMMITTED isolation-level name.
     # Keeping its default makes the local performance fixture runnable while
     # PostgreSQL continues to use READ COMMITTED by default.
