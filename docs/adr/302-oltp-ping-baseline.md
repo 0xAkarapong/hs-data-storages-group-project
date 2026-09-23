@@ -34,16 +34,33 @@ Two control runs, to explain the number rather than move it:
 - **Sequential, uncontended** (1 caller, 50 calls): mean 11.1ms/call → implied ceiling ≈ **91 req/s even at zero contention**.
 - **Per-call latency at 300 workers**: min 40ms, p50 `1640ms`, p95 `2774ms`, max `3587ms` — later callers wait roughly proportional to queue position (single-server queue behavior).
 
+### Cross-machine comparison
+
+Same command (`make benchmark-ping`), same 300 workers / 300 calls / one hot `sports_event_id`, different hardware:
+
+| Machine | Wall time | Throughput | `ping_count` |
+|---|---|---|---|
+| Windows | 3.580s | 84 req/s | 300 |
+| Mac (Apple Silicon) | 0.951s | 316 req/s | 300 |
+
+~3.8x gap:
+- Both correct — no lost updates, `ping_count` matches successful calls on both runs.
+- Same mechanism on both — one row lock still serializes every worker — so the gap is hardware, not logic.
+- Windows runs Postgres-in-Docker over WSL2/Hyper-V's virtualized disk path, adding fsync/commit latency per lock hand-off; Apple Silicon's Docker Desktop Linux VM does the same round trips faster.
+- Confirms the original 1.5-3ms/transaction guess undershot because per-trip cost is host-dependent, not just query-plan-dependent.
+
 ## Post-mortem
 
-**Mechanism — correct:**
-- 300-way concurrent throughput (84 req/s) lands within ~10% of the zero-contention sequential ceiling (~91 req/s) → the row lock really does serialize this workload; extra threads buy almost nothing.
+**Mechanism — correct, on both machines:**
+- Windows: 300-way concurrent throughput (84 req/s) lands within ~10% of the zero-contention sequential ceiling (~91 req/s) → the row lock really does serialize this workload; extra threads buy almost nothing.
+- Mac reproduces the same shape (see [Cross-machine comparison](#cross-machine-comparison)) at ~3.8x the throughput — hardware changes the constant, not the mechanism.
 - `retry_on_conflict` fired 0 times, as predicted — inert under READ COMMITTED for single-row contention.
-- No lost updates: `ping_count` = 300 = successful calls.
+- No lost updates: `ping_count` = 300 = successful calls, on both machines.
 
-**Magnitude — wrong, by ~4-10x:**
-- Predicted **300-800 req/s**, measured **84**.
-- The 1.5-3ms figure was a round-trip-count guess made without measuring anything first, as the "predict before running" rule required — it missed psycopg/SQLAlchemy overhead and the docker-forwarded TCP loopback actually in use. Guessing round-trip *count* without a measured *per-trip cost* was never going to land on the right order of magnitude.
+**Magnitude — wrong on Windows (~4-10x), roughly right on Mac:**
+- Predicted **300-800 req/s**. Windows measured **84** (miss). Mac measured **316** (inside the predicted range).
+- So the prediction's mechanism and order of magnitude were sound; it was the per-trip cost assumption (loopback + `synchronous_commit=on` fsync) that was Windows-pessimistic, not the model itself.
+- The 1.5-3ms figure was a round-trip-count guess made without measuring anything first, as the "predict before running" rule required — it missed psycopg/SQLAlchemy overhead and the docker-forwarded TCP loopback actually in use, and turned out to describe the Mac host, not the Windows one. Guessing round-trip *count* without a measured *per-trip cost* was never going to land reliably across hardware.
 
 **Couldn't fully isolate:**
 - The predicted "pool queueing" secondary factor (300 threads vs. 90-connection pool) can't be separated from row-lock wait using wall-clock time alone — both slow a request the same way.
