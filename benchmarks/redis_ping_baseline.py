@@ -1,4 +1,4 @@
-"""Redis's raw INCR ceiling — HW3 task 1 (NoSQL base performance).
+"""Single-client Redis new-key INCR baseline — HW3 task 1.
 
 A fresh key each call, so each INCR is genuinely a new record, not a
 repeated increment on one hot key — that contention story is task 2-3's,

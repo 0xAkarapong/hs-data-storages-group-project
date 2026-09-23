@@ -1,4 +1,4 @@
-"""Compare 300 concurrent record_ping calls with SQL and Redis counters.
+"""Compare 300 concurrent record_ping calls and show Redis's failure cost.
 
 Uses an isolated schema on local PostgreSQL and removes it afterward.
 Run from the project root: python benchmarks/redis_ping_boost.py
@@ -20,11 +20,11 @@ load_dotenv()
 SCHEMA = f"bench_ping_{uuid.uuid4().hex[:12]}"
 os.environ["SCHEMA_NAME"] = SCHEMA
 
-from db import create_tables, init_engine, tx  # noqa: E402
-from models import SportsEvent  # noqa: E402
-from operations.engagement import record_ping, record_ping_redis  # noqa: E402
-from redis_client import init_redis  # noqa: E402
-from seed import seed_demo_flow  # noqa: E402
+from db import create_tables, init_engine, tx
+from models import SportsEvent
+from operations.engagement import record_ping, record_ping_redis
+from redis_client import init_redis
+from seed import seed_demo_flow
 
 WORKERS = 300
 CALLS = 300
@@ -38,6 +38,28 @@ def run(fn, session_id):
     assert all(result["latest_price"] is not None for result in results)
     assert sorted(result["ping_count"] for result in results) == list(range(1, CALLS + 1))
     return seconds
+
+
+def demonstrate_failed_ping(session_id, event_id, redis, key):
+    """The same failed request rolls back in SQL but survives in Redis."""
+    with tx() as s:
+        s.get(SportsEvent, event_id).ping_count = 0
+    redis.delete(key)
+
+    for fn in (record_ping, record_ping_redis):
+        try:
+            fn(session_id, fail_after_increment=True)
+        except RuntimeError as exc:
+            print(f"{fn.__name__}: {exc}")
+        else:
+            raise AssertionError(f"{fn.__name__} did not fail")
+
+        with tx() as s:
+            sql_count = s.get(SportsEvent, event_id).ping_count
+        redis_count = int(redis.get(key) or 0)
+        expected = (0, 0) if fn is record_ping else (0, 1)
+        assert (sql_count, redis_count) == expected, (sql_count, redis_count)
+        print(f"after failed {fn.__name__}: SQL={sql_count}, Redis={redis_count}")
 
 
 def main():
@@ -78,6 +100,7 @@ def main():
         sql_rps = CALLS / statistics.median(times["sql"])
         redis_rps = CALLS / statistics.median(times["redis"])
         print(f"median: SQL {sql_rps:,.0f} req/s, Redis {redis_rps:,.0f} req/s, {redis_rps / sql_rps:.2f}x")
+        demonstrate_failed_ping(ctx["session_id"], ctx["event_id"], redis, key)
     finally:
         redis.delete(key)
         with engine.begin() as conn:

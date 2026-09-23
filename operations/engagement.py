@@ -6,7 +6,7 @@ from redis_client import get_redis
 
 
 @retry_on_conflict()
-def record_ping(streaming_session_id: int) -> dict:
+def record_ping(streaming_session_id: int, *, fail_after_increment: bool = False) -> dict:
     """
     Update the ping count using OLTP database
     """
@@ -23,6 +23,8 @@ def record_ping(streaming_session_id: int) -> dict:
             .values(ping_count=SportsEvent.ping_count + 1)
             .returning(SportsEvent.ping_count)
         )
+        if fail_after_increment:
+            raise RuntimeError("simulated failure after SQL increment")
 
         snap = s.execute(
             select(OddsSnapshot.outcome_id, OddsSnapshot.price)
@@ -40,7 +42,7 @@ def record_ping(streaming_session_id: int) -> dict:
         }
 
 
-def record_ping_redis(streaming_session_id: int) -> dict:
+def record_ping_redis(streaming_session_id: int, *, fail_after_increment: bool = False) -> dict:
     """Read session and odds in SQL; increment the event counter in Redis."""
     with tx() as s:
         sess = s.scalar(select(StreamingSession)
@@ -49,6 +51,8 @@ def record_ping_redis(streaming_session_id: int) -> dict:
             raise BusinessError("invalid or closed streaming session")
 
         new_count = get_redis().incr(f"event:{SCHEMA_NAME or 'public'}:{sess.sports_event_id}:pings")
+        if fail_after_increment:
+            raise RuntimeError("simulated failure after Redis increment")
 
         snap = s.execute(
             select(OddsSnapshot.outcome_id, OddsSnapshot.price)

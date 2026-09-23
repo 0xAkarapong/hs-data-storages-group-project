@@ -82,4 +82,47 @@ The median throughput is about 2.2x the earlier Mac result (316 req/s) and 8.1x 
 - Since the sequential baseline (zero pool contention) already lands within 10% of the concurrent number, the row lock plausibly explains nearly all of the latency — but that's inference from a proxy, not a direct measurement. Isolating it would need SQLAlchemy pool-checkout timing events; skipped since the ADR's job was identifying the *dominant* bottleneck, not decomposing the full latency budget.
 
 ## Redis boost (task 3, `record_ping_redis`)
-*(numbers to be filled in from a real run)*
+
+**Prediction before the paired run:** Moving the hot counter to Redis should
+remove the PostgreSQL row-lock queue. I expect roughly 2-4x the SQL throughput,
+not a Redis-only rate: each request still opens a PostgreSQL transaction and
+reads the session and latest odds. The extra Redis round trip may limit the gain.
+
+The paired benchmark runs each implementation three times, alternating order,
+with 300 calls to one event per run. It checks all returned counts and the final
+counter before calculating median throughput. The same script injects a failure
+immediately after each counter increment: SQL rolls its increment back; Redis
+retains one increment for a request that failed before returning.
+
+**Measured on the MacBook Air (2026-09-23):** local PostgreSQL 18 and Redis 8.10
+in Docker Compose; 300 concurrent calls per run, one hot event, 90 maximum SQL
+pool connections. Each implementation ran three times in alternating order.
+
+| Run | SQL wall time | SQL throughput | Redis wall time | Redis throughput |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 0.432s | 694 req/s | 0.298s | 1,008 req/s |
+| 2 | 0.471s | 637 req/s | 0.245s | 1,225 req/s |
+| 3 | 0.410s | 731 req/s | 0.282s | 1,063 req/s |
+| **Median** | **0.432s** | **694 req/s** | **0.282s** | **1,063 req/s** |
+
+Redis was **1.53x faster**, below the 2-4x prediction. Removing the hot SQL
+row lock helped, but each Redis request still made two SQL reads within a
+transaction, added a Redis round trip, and used a Python worker and SQL
+connection. This explains why the gain was modest compared with raw Redis
+throughput; the benchmark did not separately time those costs.
+For a SQL-only improvement, reading odds before updating the counter would
+shorten the time the hot row lock is held; batching or partitioning counters
+would reduce how often writers contend for that row. Those changes need their
+own benchmark and correctness check.
+
+The standalone new-key Redis benchmark inserted 10,000 keys in 1.066s,
+or **9,378 increments/s**, with one client and no pipelining. The isolated SQL
+benchmark completed 300 calls in 0.461s, or **650 req/s**, and verified a final
+SQL count of 300. These are different workloads, so the paired run above is
+the speedup comparison.
+
+**Consistency cost, reproduced in code:** both versions were forced to fail
+after incrementing. The failed SQL call left `(SQL, Redis) = (0, 0)` because
+its transaction rolled back. The failed Redis call left `(0, 1)`: a visible
+counter for a request that never completed. Redis's atomic `INCR` prevents a
+lost increment, but it is not atomic with the SQL work in this function.
