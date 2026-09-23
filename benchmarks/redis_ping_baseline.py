@@ -6,7 +6,7 @@ not this one. This number is a floor, not Redis's actual ceiling: one
 client, one connection, no pipelining — concurrency would move it up.
 
 Keys live under bench:event:*:pings, a namespace distinct from the
-event:{sports_event_id}:pings keys the real record_ping() will use, so
+event:{schema}:{sports_event_id}:pings keys record_ping_redis() uses, so
 this never collides with (or gets confused for) real ping counts.
 
 Run from the project root: python benchmarks/redis_ping_baseline.py
