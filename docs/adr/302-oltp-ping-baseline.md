@@ -49,6 +49,21 @@ Same command (`make benchmark-ping`), same 300 workers / 300 calls / one hot `sp
 - Windows runs Postgres-in-Docker over WSL2/Hyper-V's virtualized disk path, adding fsync/commit latency per lock hand-off; Apple Silicon's Docker Desktop Linux VM does the same round trips faster.
 - Confirms the original 1.5-3ms/transaction guess undershot because per-trip cost is host-dependent, not just query-plan-dependent.
 
+### Additional MacBook Air run (2026-09-23)
+
+Hardware: MacBook Air (Mac15,13), Apple M3 with 8 CPU cores (4 performance, 4 efficiency), 16 GB memory. Host OS: macOS 27.0. Database: local PostgreSQL 18 in Docker Compose.
+
+Ran `make benchmark-ping` three times with `DATABASE_URL` set to the local PostgreSQL instance. Each run used 300 workers, 300 total calls, and one hot `sports_event_id`:
+
+| Run | Wall time | Throughput | `ping_count` |
+|---|---:|---:|---:|
+| 1 | 0.475s | 631 req/s | 300 |
+| 2 | 0.438s | 684 req/s | 300 |
+| 3 | 0.439s | 683 req/s | 300 |
+| **Median** | **0.439s** | **683 req/s** | **300** |
+
+The median throughput is about 2.2x the earlier Mac result (316 req/s) and 8.1x the Windows result (84 req/s). All 300 calls succeeded with no lost updates. This run used the current working-tree benchmark script, which creates and removes a temporary schema; the earlier measurements used a different script revision. The workload is comparable, but the difference cannot be attributed to hardware alone.
+
 ## Post-mortem
 
 **Mechanism — correct, on both machines:**
