@@ -4,8 +4,20 @@ from decimal import Decimal
 from sqlalchemy import select
 
 from db import BusinessError, lock, retry_on_conflict, tx
-from models import (Bet, BetStatus, EventStatus, OddsSnapshot, Outcome, OutcomeStatus, Payment,
-                    PaymentDirection, PaymentStatus, SportsEvent, StreamingSession, User)
+from models import (
+    Bet,
+    BetStatus,
+    EventStatus,
+    OddsSnapshot,
+    Outcome,
+    OutcomeStatus,
+    Payment,
+    PaymentDirection,
+    PaymentStatus,
+    SportsEvent,
+    StreamingSession,
+    User,
+)
 
 MAX_ODDS_AGE = dt.timedelta(seconds=30)
 
@@ -50,8 +62,8 @@ def place_bet(user_id: int, outcome_id: int, stake: Decimal,
             raise BusinessError("no price available")
         captured_at = snap.captured_at
         if captured_at.tzinfo is None:
-            captured_at = captured_at.replace(tzinfo=dt.timezone.utc)
-        if dt.datetime.now(dt.timezone.utc) - captured_at > MAX_ODDS_AGE:
+            captured_at = captured_at.replace(tzinfo=dt.UTC)
+        if dt.datetime.now(dt.UTC) - captured_at > MAX_ODDS_AGE:
             raise BusinessError("price is stale, refresh and retry")
 
         if streaming_session_id is not None:
@@ -62,7 +74,7 @@ def place_bet(user_id: int, outcome_id: int, stake: Decimal,
 
         bet = Bet(user_id=user_id, snapshot_id=snap.snapshot_id,
                   streaming_session_id=streaming_session_id, amount_staked=stake,
-                  status=BetStatus.pending, placed_at=dt.datetime.now(dt.timezone.utc))
+                  status=BetStatus.pending, placed_at=dt.datetime.now(dt.UTC))
         s.add(bet)
         s.flush()
 

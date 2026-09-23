@@ -1,6 +1,9 @@
 import datetime as dt
-from decimal import Decimal
+import os
 import random
+from decimal import Decimal
+
+from dotenv import load_dotenv
 
 from db import create_tables, init_engine, tx
 from models import EventStatus, OddsSnapshot, Outcome, Plan, SportsEvent
@@ -8,10 +11,6 @@ from operations.auth import register_user
 from operations.betting import place_bet
 from operations.billing import purchase_subscription
 from operations.streaming import start_streaming_session
-
-
-import os
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -27,9 +26,9 @@ def seed_plans(session) -> dict[str, int]:
     """
 
     plans = [
-        Plan(plan_name="Basic",   monthly_price=Decimal("499"),  max_concurrent_streams=1),
-        Plan(plan_name="Standard",monthly_price=Decimal("799"),  max_concurrent_streams=2),
-        Plan(plan_name="Premium", monthly_price=Decimal("899"), max_concurrent_streams=4),
+        Plan(plan_name="Basic",   monthly_price=Decimal(499),  max_concurrent_streams=1),
+        Plan(plan_name="Standard",monthly_price=Decimal(799),  max_concurrent_streams=2),
+        Plan(plan_name="Premium", monthly_price=Decimal(899), max_concurrent_streams=4),
     ]
     session.add_all(plans)
     session.flush()
@@ -46,7 +45,7 @@ def seed_sports_event(session) -> int:
     :return: The ID of the created sports event
     :rtype: int
     """
-    now = dt.datetime.now(dt.timezone.utc)
+    now = dt.datetime.now(dt.UTC)
     ev = SportsEvent(
         title="Lions vs Tigers",
         sport_type="football",
@@ -68,7 +67,7 @@ def seed_outcomes_and_odds(session, ev_id: int) -> list[int]:
     :rtype: list[int]
     """
 
-    now = dt.datetime.now(dt.timezone.utc)
+    now = dt.datetime.now(dt.UTC)
 
     outcomes = [
         Outcome(sports_event_id=ev_id, description="Lions win"),
@@ -79,9 +78,9 @@ def seed_outcomes_and_odds(session, ev_id: int) -> list[int]:
 
     o1, o2 = outcomes
     odds_snapshots = [
-        OddsSnapshot(outcome_id=o1.outcome_id, captured_at=now - dt.timedelta(seconds=40), price=Decimal("210")),
-        OddsSnapshot(outcome_id=o1.outcome_id, captured_at=now, price=Decimal("195")),
-        OddsSnapshot(outcome_id=o2.outcome_id, captured_at=now, price=Decimal("340")),
+        OddsSnapshot(outcome_id=o1.outcome_id, captured_at=now - dt.timedelta(seconds=40), price=Decimal(210)),
+        OddsSnapshot(outcome_id=o1.outcome_id, captured_at=now, price=Decimal(195)),
+        OddsSnapshot(outcome_id=o2.outcome_id, captured_at=now, price=Decimal(340)),
     ]
     session.add_all(odds_snapshots)
     session.flush()

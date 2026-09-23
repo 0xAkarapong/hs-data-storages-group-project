@@ -3,7 +3,14 @@ import datetime as dt
 from sqlalchemy import func, select, update
 
 from db import BusinessError, lock, retry_on_conflict, tx
-from models import EventStatus, Plan, SportsEvent, StreamingSession, SubStatus, Subscription
+from models import (
+    EventStatus,
+    Plan,
+    SportsEvent,
+    StreamingSession,
+    Subscription,
+    SubStatus,
+)
 
 
 @retry_on_conflict()
@@ -18,7 +25,7 @@ def start_streaming_session(user_id: int, sports_event_id: int) -> int:
                                        Subscription.status == SubStatus.active)))
         if not sub:
             raise BusinessError("no active subscription")
-        if sub.end_date and sub.end_date < dt.date.today():
+        if sub.end_date and sub.end_date < dt.datetime.now(dt.UTC).date():
             raise BusinessError("subscription expired")
 
         plan = s.scalar(select(Plan).where(Plan.plan_id == sub.plan_id))
@@ -33,7 +40,7 @@ def start_streaming_session(user_id: int, sports_event_id: int) -> int:
             raise BusinessError(f"concurrent stream limit reached ({plan.max_concurrent_streams})")
 
         sess = StreamingSession(user_id=user_id, sports_event_id=sports_event_id,
-                                subscription_id=sub.subscription_id, started_at=dt.datetime.now(dt.timezone.utc))
+                                subscription_id=sub.subscription_id, started_at=dt.datetime.now(dt.UTC))
         s.add(sess)
         s.flush()
         return sess.session_id
@@ -47,7 +54,7 @@ def end_streaming_session(session_id: int) -> bool:
                               .where(StreamingSession.session_id == session_id)))
         if not sess or sess.ended_at is not None:
             return False
-        sess.ended_at = dt.datetime.now(dt.timezone.utc)
+        sess.ended_at = dt.datetime.now(dt.UTC)
         return True
 
 
@@ -62,6 +69,6 @@ def end_streaming_sessions_bulk(session_ids: list[int]) -> int:
             update(StreamingSession)
             .where(StreamingSession.session_id.in_(session_ids),
                    StreamingSession.ended_at.is_(None))
-            .values(ended_at=dt.datetime.now(dt.timezone.utc))
+            .values(ended_at=dt.datetime.now(dt.UTC))
         )
         return result.rowcount

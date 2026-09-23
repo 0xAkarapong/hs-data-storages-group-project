@@ -1,27 +1,29 @@
 import functools
+import os
 import random
 import time
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, event
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from models import Base
 
-import os
-from dotenv import load_dotenv
-
 load_dotenv()
 
 DEFAULT_URL = os.getenv("DATABASE_URL")
-_engine = None
+_engine: Engine | None = None
 SessionLocal: sessionmaker[Session] | None = None
 
 
-def init_engine(url: str = DEFAULT_URL, echo: bool = False, isolation_level: str = "READ COMMITTED", **pool_options):
+def init_engine(url: str | None = DEFAULT_URL, echo: bool = False, isolation_level: str = "READ COMMITTED", **pool_options):
     """ Initialize the SQLAlchemy engine and session factory. """
     global _engine, SessionLocal
+    if url is None:
+        raise RuntimeError("DATABASE_URL is not set")
     engine_options = {"echo": echo, "future": True, "pool_pre_ping": True, **pool_options}
     # SQLite does not accept PostgreSQL's READ COMMITTED isolation-level name.
     # Keeping its default makes the local performance fixture runnable while
@@ -35,6 +37,8 @@ def init_engine(url: str = DEFAULT_URL, echo: bool = False, isolation_level: str
 
 def create_tables(drop_first: bool = False):
     """(1) Create every table of the ER diagram."""
+    if _engine is None:
+        raise RuntimeError("database engine is not initialized")
     if drop_first:
         Base.metadata.drop_all(_engine)
     Base.metadata.create_all(_engine)
@@ -43,6 +47,8 @@ def create_tables(drop_first: bool = False):
 @contextmanager
 def tx():
     """One unit of work = one transaction. Commit on success, rollback on anything."""
+    if SessionLocal is None:
+        raise RuntimeError("database engine is not initialized")
     s = SessionLocal()
     try:
         with s.begin():

@@ -3,7 +3,15 @@ import datetime as dt
 from sqlalchemy import func, select
 
 from db import BusinessError, lock, retry_on_conflict, tx
-from models import Payment, PaymentDirection, PaymentStatus, Plan, SubStatus, Subscription, User
+from models import (
+    Payment,
+    PaymentDirection,
+    PaymentStatus,
+    Plan,
+    Subscription,
+    SubStatus,
+    User,
+)
 
 
 @retry_on_conflict()
@@ -34,7 +42,7 @@ def purchase_subscription(user_id: int, plan_id: int, payment_method: str,
         if active:
             raise BusinessError("user already has an active subscription")
 
-        today = dt.date.today()
+        today = dt.datetime.now(dt.UTC).date()
         sub = Subscription(user_id=user_id, plan_id=plan_id, status=SubStatus.active,
                            start_date=today, end_date=today + dt.timedelta(days=30 * months))
         s.add(sub)
