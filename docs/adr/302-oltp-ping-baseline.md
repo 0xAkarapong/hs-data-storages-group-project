@@ -80,3 +80,6 @@ The median throughput is about 2.2x the earlier Mac result (316 req/s) and 8.1x 
 **Couldn't fully isolate:**
 - The predicted "pool queueing" secondary factor (300 threads vs. 90-connection pool) can't be separated from row-lock wait using wall-clock time alone — both slow a request the same way.
 - Since the sequential baseline (zero pool contention) already lands within 10% of the concurrent number, the row lock plausibly explains nearly all of the latency — but that's inference from a proxy, not a direct measurement. Isolating it would need SQLAlchemy pool-checkout timing events; skipped since the ADR's job was identifying the *dominant* bottleneck, not decomposing the full latency budget.
+
+## Redis boost (task 3, `record_ping_redis`)
+*(numbers to be filled in from a real run)*
