@@ -108,6 +108,28 @@ def seed_demo_flow() -> dict[str, int]:
 
     return {"user_id": uid, "event_id": event_id, "outcome_id": outcome_id, "session_id": sid}
 
+def seed_event_with_session(plan_id: int, tag: str) -> tuple[int, int]:
+    """
+    Seed one event (with outcomes/odds) plus a user subscribed on `plan_id`
+    with an open streaming session on it. Unlike `seed_demo_flow()`, `tag`
+    makes the user distinct, so this is safe to call more than once per run
+    to get several independent events.
+
+    :param int plan_id: the plan the new user subscribes to
+    :param str tag: unique per call — becomes the user's email/display name
+    :return: (event_id, session_id)
+    :rtype: tuple[int, int]
+    """
+    with tx() as s:
+        event_id = seed_sports_event(s)
+        seed_outcomes_and_odds(s, event_id)
+
+    uid = register_user(f"{tag}@example.com", "s3cret!", tag)
+    purchase_subscription(uid, plan_id=plan_id, payment_method="card", idempotency_key=f"sub:{uid}")
+    session_id = start_streaming_session(uid, event_id)
+
+    return event_id, session_id
+
 
 if __name__ == "__main__":
     init_engine(DATABASE_URL)
