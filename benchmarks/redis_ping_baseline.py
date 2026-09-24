@@ -14,26 +14,23 @@ Run from the project root: python benchmarks/redis_ping_baseline.py
 import sys
 import time
 from pathlib import Path
-import os
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from redis_client import init_redis
 
 PING_COUNT = 100
-SCHEMA=os.getenv("SCHEMA_NAME")
 
 
 def main():
     r = init_redis()
     r.ping()  # warm the connection before timing
-    for key in r.scan_iter("event:{SCHEMA}:*:pings"):
+    for key in r.scan_iter("bench:event:*:pings"):
         r.delete(key)
 
     started = time.perf_counter()
     for event_id in range(PING_COUNT):
-        # assert r.incr(f"bench:event:{event_id}:pings") == 1
-        r.incr(f"event:{SCHEMA}:{event_id}:pings") 
+        assert r.incr(f"bench:event:{event_id}:pings") == 1
     seconds = time.perf_counter() - started
 
     rps = PING_COUNT / seconds
