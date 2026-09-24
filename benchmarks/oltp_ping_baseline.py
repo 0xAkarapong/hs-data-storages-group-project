@@ -59,9 +59,12 @@ def main():
 
         assert all(result["latest_price"] is not None for result in results)
         assert sorted(result["ping_count"] for result in results) == list(range(1, TOTAL_CALLS + 1))
+
         with tx() as s:
             final_count = s.get(SportsEvent, ctx["event_id"]).ping_count
+
         assert final_count == TOTAL_CALLS
+
         print(f"oltp record_ping, {WORKERS} workers, 1 hot sports_event_id: {seconds:.3f}s, {TOTAL_CALLS / seconds:,.0f} req/s")
         print(f"ping_count after run: {final_count} (== successful calls: {len(results)})")
     finally:

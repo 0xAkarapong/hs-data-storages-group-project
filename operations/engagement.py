@@ -78,6 +78,7 @@ def flush_counters(p: float = 0.0) -> list[dict]:
                 .where(SportsEvent.sports_event_id == sports_event_id)
                 .values(ping_count=SportsEvent.ping_count + delta)
             )
+
         results.append({"sports_event_id": sports_event_id, "delta": delta, "persisted": True})
     return results
 
