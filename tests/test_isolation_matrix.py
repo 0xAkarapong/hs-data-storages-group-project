@@ -24,12 +24,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sqlalchemy import func, select
-from sqlalchemy.exc import DBAPIError, OperationalError
 
 import db
 from db import create_tables, init_engine, tx
-from models import Plan, StreamingSession, SubStatus, Subscription
+from models import Plan, StreamingSession, Subscription, SubStatus
 from seed import seed_demo_flow
+
+
+def _sessions():
+    if db.SessionLocal is None:
+        raise RuntimeError("database engine is not initialized")
+    return db.SessionLocal(), db.SessionLocal()
 
 
 def _setup():
@@ -48,14 +53,17 @@ def _setup():
 
 def non_repeatable_read(ctx):
     """Session A reads a row twice in one transaction; Session B updates it in between."""
-    a, b = db.SessionLocal(), db.SessionLocal()
+    a, b = _sessions()
     try:
         print("="*80 + "starting non-repeatable read test" + "="*80)
         with a.begin():
             v1 = a.scalar(select(Plan.max_concurrent_streams).where(Plan.plan_id == ctx["plan_id"]))
+            assert v1 is not None
 
             with b.begin():
-                b.get(Plan, ctx["plan_id"]).max_concurrent_streams = v1 + 1
+                plan = b.get(Plan, ctx["plan_id"])
+                assert plan is not None
+                plan.max_concurrent_streams = v1 + 1
                 b.commit()
         
             v2 = a.scalar(select(Plan.max_concurrent_streams).where(Plan.plan_id == ctx["plan_id"]))
@@ -70,7 +78,7 @@ def non_repeatable_read(ctx):
 
 def phantom_read(ctx):
     """Session A re-runs a range COUNT; Session B inserts a matching row in between."""
-    a, b = db.SessionLocal(), db.SessionLocal()
+    a, b = _sessions()
 
     def query_open_sessions(s):
         return s.scalar(
@@ -91,7 +99,7 @@ def phantom_read(ctx):
                     user_id=ctx["user_id"],
                     sports_event_id=ctx["event_id"],
                     subscription_id=ctx["subscription_id"],
-                    started_at=dt.datetime.now(dt.timezone.utc),
+                    started_at=dt.datetime.now(dt.UTC),
                 ))
                 b.commit()
 
@@ -127,7 +135,7 @@ if __name__ == "__main__":
         try:
             ctx = _setup()
             DEMOS[name](ctx)
-            print(f"PASSED: no anomaly observed")
+            print("PASSED: no anomaly observed")
 
         except AssertionError as exc:
             print(f"FAILED: {exc}")

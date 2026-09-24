@@ -17,10 +17,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import func, select
 
 from db import BusinessError, create_tables, init_engine, tx
-from models import EventStatus, Plan, SportsEvent, StreamingSession, SubStatus, Subscription
+from models import (
+    EventStatus,
+    Plan,
+    SportsEvent,
+    StreamingSession,
+    Subscription,
+    SubStatus,
+)
 from operations.streaming import start_streaming_session
 from seed import seed_demo_flow
-
 
 WORKERS = 5
 
@@ -62,7 +68,7 @@ def start_streaming_session_without_lock(
             user_id=user_id,
             sports_event_id=sports_event_id,
             subscription_id=subscription.subscription_id,
-            started_at=dt.datetime.now(dt.timezone.utc),
+            started_at=dt.datetime.now(dt.UTC),
         )
 
         session.add(streaming_session)
@@ -89,7 +95,7 @@ def run_concurrently(mode: str, user_id: int, event_id: int):
         return list(executor.map(invoke, range(WORKERS)))
 
 
-def _prepare_database(database_url: str) -> dict:
+def _prepare_database(database_url: str | None) -> dict:
     init_engine(database_url, isolation_level="READ COMMITTED")
     create_tables(drop_first=True)
     return seed_demo_flow()  # Standard plan: limit 2, with 1 session open.

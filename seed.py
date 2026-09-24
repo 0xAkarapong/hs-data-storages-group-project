@@ -1,6 +1,9 @@
 import datetime as dt
-from decimal import Decimal
+import os
 import random
+from decimal import Decimal
+
+from dotenv import load_dotenv
 
 from db import create_tables, init_engine, tx
 from models import EventStatus, OddsSnapshot, Outcome, Plan, SportsEvent
@@ -8,10 +11,6 @@ from operations.auth import register_user
 from operations.betting import place_bet
 from operations.billing import purchase_subscription
 from operations.streaming import start_streaming_session
-
-
-import os
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -27,9 +26,9 @@ def seed_plans(session) -> dict[str, int]:
     """
 
     plans = [
-        Plan(plan_name="Basic",   monthly_price=Decimal("499"),  max_concurrent_streams=1),
-        Plan(plan_name="Standard",monthly_price=Decimal("799"),  max_concurrent_streams=2),
-        Plan(plan_name="Premium", monthly_price=Decimal("899"), max_concurrent_streams=4),
+        Plan(plan_name="Basic",   monthly_price=Decimal(499),  max_concurrent_streams=1),
+        Plan(plan_name="Standard",monthly_price=Decimal(799),  max_concurrent_streams=2),
+        Plan(plan_name="Premium", monthly_price=Decimal(899), max_concurrent_streams=4),
     ]
     session.add_all(plans)
     session.flush()
@@ -46,7 +45,7 @@ def seed_sports_event(session) -> int:
     :return: The ID of the created sports event
     :rtype: int
     """
-    now = dt.datetime.now(dt.timezone.utc)
+    now = dt.datetime.now(dt.UTC)
     ev = SportsEvent(
         title="Lions vs Tigers",
         sport_type="football",
@@ -68,7 +67,7 @@ def seed_outcomes_and_odds(session, ev_id: int) -> list[int]:
     :rtype: list[int]
     """
 
-    now = dt.datetime.now(dt.timezone.utc)
+    now = dt.datetime.now(dt.UTC)
 
     outcomes = [
         Outcome(sports_event_id=ev_id, description="Lions win"),
@@ -79,9 +78,9 @@ def seed_outcomes_and_odds(session, ev_id: int) -> list[int]:
 
     o1, o2 = outcomes
     odds_snapshots = [
-        OddsSnapshot(outcome_id=o1.outcome_id, captured_at=now - dt.timedelta(seconds=40), price=Decimal("210")),
-        OddsSnapshot(outcome_id=o1.outcome_id, captured_at=now, price=Decimal("195")),
-        OddsSnapshot(outcome_id=o2.outcome_id, captured_at=now, price=Decimal("340")),
+        OddsSnapshot(outcome_id=o1.outcome_id, captured_at=now - dt.timedelta(seconds=40), price=Decimal(210)),
+        OddsSnapshot(outcome_id=o1.outcome_id, captured_at=now, price=Decimal(195)),
+        OddsSnapshot(outcome_id=o2.outcome_id, captured_at=now, price=Decimal(340)),
     ]
     session.add_all(odds_snapshots)
     session.flush()
@@ -108,6 +107,28 @@ def seed_demo_flow() -> dict[str, int]:
     place_bet(uid, outcome_id, Decimal("2500.00"), sid, idempotency_key=f"bet:{uid}:1")
 
     return {"user_id": uid, "event_id": event_id, "outcome_id": outcome_id, "session_id": sid}
+
+def seed_event_with_session(plan_id: int, tag: str) -> tuple[int, int]:
+    """
+    Seed one event (with outcomes/odds) plus a user subscribed on `plan_id`
+    with an open streaming session on it. Unlike `seed_demo_flow()`, `tag`
+    makes the user distinct, so this is safe to call more than once per run
+    to get several independent events.
+
+    :param int plan_id: the plan the new user subscribes to
+    :param str tag: unique per call — becomes the user's email/display name
+    :return: (event_id, session_id)
+    :rtype: tuple[int, int]
+    """
+    with tx() as s:
+        event_id = seed_sports_event(s)
+        seed_outcomes_and_odds(s, event_id)
+
+    uid = register_user(f"{tag}@example.com", "s3cret!", tag)
+    purchase_subscription(uid, plan_id=plan_id, payment_method="card", idempotency_key=f"sub:{uid}")
+    session_id = start_streaming_session(uid, event_id)
+
+    return event_id, session_id
 
 
 if __name__ == "__main__":

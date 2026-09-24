@@ -4,21 +4,28 @@ Run from the project root: python benchmarks/streaming_session_close.py
 """
 import datetime as dt
 import sys
-import tempfile
 import time
 from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import os
+
+from dotenv import load_dotenv
 from sqlalchemy import insert
 
 from db import create_tables, init_engine, tx
-from models import EventStatus, Plan, SportsEvent, StreamingSession, SubStatus, Subscription, User
+from models import (
+    EventStatus,
+    Plan,
+    SportsEvent,
+    StreamingSession,
+    Subscription,
+    SubStatus,
+    User,
+)
 from operations.streaming import end_streaming_session, end_streaming_sessions_bulk
-
-import os
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -28,7 +35,7 @@ SESSION_COUNT = 10_000
 
 def seed_sessions(count=SESSION_COUNT):
     """Create open sessions and return their ids."""
-    now = dt.datetime.now(dt.timezone.utc)
+    now = dt.datetime.now(dt.UTC)
     with tx() as s:
         user = User(email="benchmark@example.com", password_hash="x", display_name="Benchmark")
         plan = Plan(plan_name="Benchmark", monthly_price=Decimal("1.00"),

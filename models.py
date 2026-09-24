@@ -2,15 +2,24 @@ from __future__ import annotations
 
 import datetime as dt
 import enum
+import os
 from decimal import Decimal
 
+from dotenv import load_dotenv
 from sqlalchemy import (
-    CheckConstraint, Date, DateTime, Enum, ForeignKey, Index, Numeric,
-    String, UniqueConstraint, func, text,
+    CheckConstraint,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    UniqueConstraint,
+    func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from dotenv import load_dotenv
-import os
 
 load_dotenv()
 
@@ -68,7 +77,7 @@ class PaymentDirection(str, enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = {"schema": SCHEMA_NAME}
+    __table_args__ = ({"schema": SCHEMA_NAME},)
     
     user_id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
@@ -76,9 +85,9 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="user")
-    bets: Mapped[list["Bet"]] = relationship(back_populates="user")
-    sessions: Mapped[list["StreamingSession"]] = relationship(back_populates="user")
+    subscriptions: Mapped[list[Subscription]] = relationship(back_populates="user")
+    bets: Mapped[list[Bet]] = relationship(back_populates="user")
+    sessions: Mapped[list[StreamingSession]] = relationship(back_populates="user")
 
 
 class Plan(Base):
@@ -119,7 +128,7 @@ class Subscription(Base):
 
 class SportsEvent(Base):
     __tablename__ = "sports_events"
-    __table_args__ = {"schema": SCHEMA_NAME}
+    __table_args__ = ({"schema": SCHEMA_NAME},)
 
     sports_event_id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -127,7 +136,11 @@ class SportsEvent(Base):
     start_time: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[EventStatus] = mapped_column(Enum(EventStatus, name="event_status", inherit_schema=True),
                                                 nullable=False, default=EventStatus.scheduled)
-    outcomes: Mapped[list["Outcome"]] = relationship(back_populates="event")
+
+    # Total Pings ever received
+    ping_count: Mapped[int] = mapped_column(nullable=False, default=0, server_default=text("0"))
+
+    outcomes: Mapped[list[Outcome]] = relationship(back_populates="event")
 
 
 class Outcome(Base):
@@ -138,7 +151,7 @@ class Outcome(Base):
     status: Mapped[OutcomeStatus] = mapped_column(Enum(OutcomeStatus, name="outcome_status", inherit_schema=True),
                                                   nullable=False, default=OutcomeStatus.open)
     event: Mapped[SportsEvent] = relationship(back_populates="outcomes")
-    snapshots: Mapped[list["OddsSnapshot"]] = relationship(back_populates="outcome")
+    snapshots: Mapped[list[OddsSnapshot]] = relationship(back_populates="outcome")
     __table_args__ = (
         UniqueConstraint("sports_event_id", "description", name="uq_outcome_desc"),
         {"schema": SCHEMA_NAME},

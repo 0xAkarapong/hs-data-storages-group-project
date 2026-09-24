@@ -1,7 +1,6 @@
 import hashlib
 import os
 
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from db import BusinessError, retry_on_conflict, tx
