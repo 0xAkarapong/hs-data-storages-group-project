@@ -23,14 +23,15 @@ PING_COUNT = 100
 
 
 def main():
+    keys = [f"bench:event:{event_id}:pings" for event_id in range(PING_COUNT)]
+    print("PING PONG")
     r = init_redis()
     r.ping()  # warm the connection before timing
-    for key in r.scan_iter("bench:event:*:pings"):
-        r.delete(key)
+    r.delete(*keys)  # one round trip; SCAN over a large remote keyspace takes minutes
 
     started = time.perf_counter()
-    for event_id in range(PING_COUNT):
-        assert r.incr(f"bench:event:{event_id}:pings") == 1
+    for key in keys:
+        assert r.incr(key) == 1
     seconds = time.perf_counter() - started
 
     rps = PING_COUNT / seconds
