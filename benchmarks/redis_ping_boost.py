@@ -1,7 +1,7 @@
 """Compare 300 concurrent record_ping calls and show Redis's failure cost.
 
-Uses an isolated schema on local PostgreSQL and removes it afterward.
-Run from the project root: python benchmarks/redis_ping_boost.py
+Uses an isolated schema on the PostgreSQL instance in .env and removes it afterward.
+Run: python benchmarks/redis_ping_boost.py
 """
 import os
 import statistics
@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from sqlalchemy.engine import URL
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 SCHEMA = f"bench_ping_{uuid.uuid4().hex[:12]}"
 os.environ["SCHEMA_NAME"] = SCHEMA
@@ -67,12 +67,12 @@ def main():
         "postgresql+psycopg",
         username=os.environ["POSTGRES_USER"],
         password=os.environ["POSTGRES_PASSWORD"],
-        host="localhost",
+        host=os.environ["POSTGRES_HOST"],
         port=int(os.environ.get("POSTGRES_PORT", "5432")),
         database=os.environ["POSTGRES_DB"],
     )
     engine = init_engine(url.render_as_string(hide_password=False), pool_size=20, max_overflow=70, pool_timeout=60)
-    redis = init_redis("redis://localhost:6379/0")
+    redis = init_redis()
     redis.ping()
     key = f"event:{SCHEMA}:1:pings"
 
