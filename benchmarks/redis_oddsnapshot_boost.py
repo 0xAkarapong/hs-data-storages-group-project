@@ -1,9 +1,10 @@
 """Compare direct-SQL vs Redis-buffered OddsSnapshot writes — HW3-alternative task 3.
 
-Postgres path: record_odds_update does the INSERT + hot-outcome latest_price
-UPDATE directly in Postgres. Redis path: record_odds_update_redis only
-queues the write in Redis; a background flusher drains it into Postgres in
-batches while the run is still going. Both report accepted requests/second:
+Postgres path: record_odds_update does the validation SELECT, INSERT and
+hot-outcome latest_price UPDATE directly in Postgres. Redis path:
+record_odds_update_redis validates against a Redis status cache and only
+queues the write in Redis — no Postgres on the request path; a background
+flusher drains the queue into Postgres in batches while the run is still going. Both report accepted requests/second:
 Postgres from a row-count snapshot (accepted == landed, synchronous), Redis
 from the accepted counter (never LLEN, which drops as the flusher drains
 it) — cross-checked against an independent Postgres row-count delta.
@@ -80,7 +81,8 @@ def run_path_postgres(outcome_id: int) -> float:
     landed = count_snapshots_for(outcome_id) - before
     print(f"  postgres: {counters['calls']} accepted, {counters['conflicts']} conflicts, "
           f"{landed} landed, {seconds:.1f}s -> {landed / seconds:,.1f} RPS")
-    assert landed == counters["calls"] - counters["conflicts"], (landed, counters)
+    # `calls` counts successful calls only — conflicts are already excluded.
+    assert landed == counters["calls"], (landed, counters)
     return landed / seconds
 
 
@@ -102,7 +104,10 @@ def run_path_redis(outcome_id: int, run_id: str) -> float:
             landed += result["landed"]
             conflicts += result["conflicts"]
             lost += result["lost"]
-            stop_flushing.wait(FLUSH_INTERVAL_SECONDS)
+            # Only idle when the queue is drained — a full batch means we're behind, so go again
+            # immediately. Sleeping unconditionally caps ingest at FLUSH_BATCH_SIZE / interval.
+            if result["popped"] < FLUSH_BATCH_SIZE:
+                stop_flushing.wait(FLUSH_INTERVAL_SECONDS)
 
     before = count_snapshots_for(outcome_id)
     deadline = time.perf_counter() + DURATION_SECONDS
@@ -116,6 +121,7 @@ def run_path_redis(outcome_id: int, run_id: str) -> float:
     for t in threads:
         t.join()
     seconds = time.perf_counter() - started
+    backlog_at_deadline = get_redis().llen(odds_queue_key(run_id))
 
     stop_flushing.set()
     flush_thread.join()
@@ -134,6 +140,8 @@ def run_path_redis(outcome_id: int, run_id: str) -> float:
 
     print(f"  redis: {accepted} accepted, {landed} landed, {conflicts} conflicts, "
           f"{lost} lost, {still_buffered} still buffered, {seconds:.1f}s -> {rps:,.1f} RPS")
+    print(f"         flusher backlog when workers stopped: {backlog_at_deadline} queued "
+          f"(small = Postgres batch ingest keeps up with accepted RPS)")
     assert accepted == landed + conflicts + still_buffered + lost, (accepted, landed, conflicts, still_buffered, lost)
     # Cross-check flush_odds_queue's self-reported `landed` against an
     # independently observed Postgres row-count delta — not just numbers

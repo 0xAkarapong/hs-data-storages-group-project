@@ -14,9 +14,15 @@ seeds a fresh SportsEvent/Outcome inside whatever SCHEMA_NAME already exists
 and scopes every count to that one new outcome_id, never the whole table —
 that table already holds other runs' and teammates' rows.
 
-Run from the project root: python benchmarks/oltp_oddsnapshot_baseline.py
+Per-call latency (p50/p95/p99) is recorded alongside RPS — RPS says how much,
+latency says why. Run it with 1 worker and with 8: if RPS barely moves while
+latency grows, the workers are queueing on the hot outcome's row lock (the
+UPDATE of outcomes.latest_price holds it until COMMIT), not on Postgres CPU.
+
+Run from the project root: python benchmarks/oltp_oddsnapshot_baseline.py [workers]
 """
 import datetime as dt
+import statistics
 import sys
 import threading
 import time
@@ -31,14 +37,16 @@ from db import create_tables, init_engine, tx
 from operations.odds_feed import count_snapshots_for, ensure_latest_price_columns, record_odds_update
 from seed import seed_outcomes_and_odds, seed_sports_event
 
-WORKERS = 8
+WORKERS = int(sys.argv[1]) if len(sys.argv) > 1 else 8
 DURATION_SECONDS = 15
 
 
 def worker(outcome_id: int, deadline: float, counters: dict, lock: threading.Lock) -> None:
     calls = conflicts = 0
+    latencies = []
     while time.perf_counter() < deadline:
         price = Decimal("2.000") + Decimal(calls % 500) / 1000
+        started = time.perf_counter()
         try:
             record_odds_update(outcome_id, price, dt.datetime.now(dt.UTC))
             calls += 1
@@ -46,9 +54,15 @@ def worker(outcome_id: int, deadline: float, counters: dict, lock: threading.Loc
             # (outcome_id, captured_at) collision under concurrency on the
             # hot outcome — a real, expected rejection (see Q9), not a bug.
             conflicts += 1
+        latencies.append(time.perf_counter() - started)
     with lock:
         counters["calls"] += calls
         counters["conflicts"] += conflicts
+        counters["latencies"].extend(latencies)
+
+
+def percentile_ms(latencies: list[float], pct: int) -> float:
+    return statistics.quantiles(latencies, n=100)[pct - 1] * 1000
 
 
 def main():
@@ -62,7 +76,7 @@ def main():
 
     before = count_snapshots_for(outcome_id)
 
-    counters = {"calls": 0, "conflicts": 0}
+    counters = {"calls": 0, "conflicts": 0, "latencies": []}
     lock = threading.Lock()
     deadline = time.perf_counter() + DURATION_SECONDS
     threads = [threading.Thread(target=worker, args=(outcome_id, deadline, counters, lock))
@@ -81,8 +95,12 @@ def main():
     print(f"oltp record_odds_update, {WORKERS} workers, 1 hot outcome, {seconds:.1f}s window:")
     print(f"  accepted calls: {counters['calls']}, conflicts: {counters['conflicts']}")
     print(f"  rows landed (DB row-count snapshot): {landed}, RPS: {rps:,.1f}")
+    lat = counters["latencies"]
+    print(f"  latency per call: p50 {percentile_ms(lat, 50):.2f} ms, p95 {percentile_ms(lat, 95):.2f} ms, "
+          f"p99 {percentile_ms(lat, 99):.2f} ms")
 
-    assert landed == counters["calls"] - counters["conflicts"], (landed, counters)
+    # `calls` counts successful calls only — conflicts are already excluded.
+    assert landed == counters["calls"], (landed, counters["calls"], counters["conflicts"])
 
 
 if __name__ == "__main__":
