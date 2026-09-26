@@ -32,6 +32,7 @@ if __name__ == "__main__":
     r = init_redis()
 
     raw = r.lpop(odds_queue_key(run_id), batch_size) or []
+    assert isinstance(raw, list)
     print(f"popped {len(raw)}", flush=True)
 
     sys.stdin.readline()  # the parent's go-ahead — it never sends one

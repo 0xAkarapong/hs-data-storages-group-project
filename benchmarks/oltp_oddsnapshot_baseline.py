@@ -34,7 +34,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy.exc import IntegrityError
 
 from db import create_tables, init_engine, tx
-from operations.odds_feed import count_snapshots_for, ensure_latest_price_columns, record_odds_update
+from operations.odds_feed import (
+    count_snapshots_for,
+    ensure_latest_price_columns,
+    record_odds_update,
+)
 from seed import seed_outcomes_and_odds, seed_sports_event
 
 WORKERS = int(sys.argv[1]) if len(sys.argv) > 1 else 8

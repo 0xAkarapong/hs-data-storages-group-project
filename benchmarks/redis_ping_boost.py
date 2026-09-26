@@ -26,7 +26,6 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from db import create_tables, init_engine, tx
 from models import (
-    SCHEMA_NAME,
     Bet,
     OddsSnapshot,
     Outcome,
@@ -117,8 +116,8 @@ def main():
     # a wide SQL pool against a classroom-safe-capped Redis pool would make the SQL
     # path look faster purely because it has 9x the concurrent connections.
     from redis_client import MAX_CONNECTIONS
-    engine = init_engine(url.render_as_string(hide_password=False),
-                         pool_size=MAX_CONNECTIONS, max_overflow=0, pool_timeout=60)
+    init_engine(url.render_as_string(hide_password=False),
+                pool_size=MAX_CONNECTIONS, max_overflow=0, pool_timeout=60)
     redis = init_redis()
     redis.ping()
     create_tables()  # additive only — creates missing tables, never drops/alters existing ones

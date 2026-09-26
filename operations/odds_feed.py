@@ -122,6 +122,7 @@ def flush_odds_queue(run_id: str, batch_size: int = 500, p: float = 0.0) -> dict
     raw = get_redis().lpop(odds_queue_key(run_id), batch_size)
     if not raw:
         return {"popped": 0, "landed": 0, "conflicts": 0, "lost": 0}
+    assert isinstance(raw, list)
 
     if random.random() < p:
         return {"popped": len(raw), "landed": 0, "conflicts": 0, "lost": len(raw)}

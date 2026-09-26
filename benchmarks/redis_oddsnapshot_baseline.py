@@ -74,7 +74,7 @@ def main():
 
     seq_rps = SEQUENTIAL_COUNT / seq_seconds
     pipe_rps = RECORD_COUNT / pipe_seconds
-    print(f"redis set, new key per call, 1 connection:")
+    print("redis set, new key per call, 1 connection:")
     print(f"  sequential: {SEQUENTIAL_COUNT:>7,} records in {seq_seconds:.3f}s -> {seq_rps:>10,.0f} records/s "
           f"({seq_seconds / SEQUENTIAL_COUNT * 1000:.2f} ms/record = one round trip)")
     print(f"  pipelined:  {RECORD_COUNT:>7,} records in {pipe_seconds:.3f}s -> {pipe_rps:>10,.0f} records/s "
