@@ -150,8 +150,16 @@ class Outcome(Base):
     description: Mapped[str] = mapped_column(String(200), nullable=False)
     status: Mapped[OutcomeStatus] = mapped_column(Enum(OutcomeStatus, name="outcome_status", inherit_schema=True),
                                                   nullable=False, default=OutcomeStatus.open)
+
+    # Cached latest price, kept in step with the newest OddsSnapshot row.
+    # Guarded by latest_captured_at so an out-of-order write (concurrent
+    # inserts, or a flush batch landing after a newer one) can't roll it back.
+    latest_price: Mapped[Decimal | None] = mapped_column(ODDS)
+    latest_captured_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
     event: Mapped[SportsEvent] = relationship(back_populates="outcomes")
     snapshots: Mapped[list[OddsSnapshot]] = relationship(back_populates="outcome")
+
     __table_args__ = (
         UniqueConstraint("sports_event_id", "description", name="uq_outcome_desc"),
         {"schema": SCHEMA_NAME},

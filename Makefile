@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install sync run test test-flush-counters isolation-break isolation-fixed build db-up db-down redis-up benchmark benchmark-redis benchmark-ping benchmark-ping-redis demo-flush-counters clean
+.PHONY: help install sync run test test-flush-counters isolation-break isolation-fixed build db-up db-down redis-up benchmark benchmark-redis benchmark-ping benchmark-ping-redis demo-flush-counters benchmark-oddsnapshot-redis-simple benchmark-oddsnapshot benchmark-oddsnapshot-redis demo-oddsnapshot-crash clean
 
 help: ## Show available commands.
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -54,6 +54,18 @@ benchmark-ping-redis: ## Compare SQL and Redis counters on local services (requi
 
 demo-flush-counters: ## Show a lost ping counter after a simulated crash mid-flush (requires db-up and redis-up).
 	uv run python benchmarks/flush_counters_crash_demo.py
+
+benchmark-oddsnapshot-redis-simple: ## HW3-alt task 1: raw Redis new-record SET ceiling (requires REDIS_URL / redis-up).
+	uv run python benchmarks/redis_oddsnapshot_baseline.py
+
+benchmark-oddsnapshot: ## HW3-alt task 2: record_odds_update on one hot outcome, duration-based (requires DATABASE_URL).
+	uv run python benchmarks/oltp_oddsnapshot_baseline.py
+
+benchmark-oddsnapshot-redis: ## HW3-alt task 3: compare direct-SQL vs Redis-buffered OddsSnapshot writes (requires DATABASE_URL and REDIS_URL).
+	uv run python benchmarks/redis_oddsnapshot_boost.py
+
+demo-oddsnapshot-crash: ## HW3-alt task 4: show a lost OddsSnapshot write after a real crash mid-flush (requires DATABASE_URL and REDIS_URL).
+	uv run python benchmarks/oddsnapshot_flush_crash_demo.py
 
 clean: ## Remove generated Python build artifacts.
 	@find . -type d \( -name __pycache__ -o -name .pytest_cache \) -prune -exec rm -rf {} +
