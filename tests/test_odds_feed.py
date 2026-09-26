@@ -13,6 +13,7 @@ from operations.odds_feed import (
     flush_odds_queue,
     odds_accepted_key,
     odds_queue_key,
+    outcome_status_key,
     record_odds_update,
     record_odds_update_redis,
 )
@@ -22,10 +23,11 @@ from seed import seed_outcomes_and_odds, seed_sports_event
 T0 = dt.datetime(2026, 9, 26, 12, 0, 0, tzinfo=dt.UTC)
 
 
-def cleanup_redis(run_id: str) -> None:
+def cleanup_redis(run_id: str, *outcome_ids: int) -> None:
     """Never flushdb() — this Redis is shared with the rest of the class.
     Delete only this run's own keys, by exact name."""
-    get_redis().delete(odds_queue_key(run_id), odds_accepted_key(run_id))
+    get_redis().delete(odds_queue_key(run_id), odds_accepted_key(run_id),
+                       *(outcome_status_key(o) for o in outcome_ids))
 
 
 if __name__ == "__main__":
@@ -135,6 +137,36 @@ if __name__ == "__main__":
         except BusinessError:
             pass
 
+        # --- What the status cache gives up: a stale-read window after settlement ---
+        # Warm outcome_id's "open" status into the cache, then settle it in Postgres
+        # (as settle_outcome() would): Path B keeps accepting ticks until the cached
+        # status expires, Path A (SQL) rejects immediately.
+        get_redis().delete(outcome_status_key(outcome_id))
+        record_odds_update_redis(outcome_id, Decimal("5.90"), T0 + dt.timedelta(seconds=299), run_id)
+        with tx() as s:
+            s.get(Outcome, outcome_id).status = OutcomeStatus.lost
+        record_odds_update_redis(outcome_id, Decimal("6.00"), T0 + dt.timedelta(seconds=300), run_id)
+        try:
+            record_odds_update(outcome_id, Decimal("6.00"), T0 + dt.timedelta(seconds=301))
+            assert False, "expected BusinessError: SQL path sees the settlement at once"
+        except BusinessError:
+            pass
+        get_redis().delete(outcome_status_key(outcome_id))  # expiry, fast-forwarded
+        try:
+            record_odds_update_redis(outcome_id, Decimal("6.10"), T0 + dt.timedelta(seconds=302), run_id)
+            assert False, "expected BusinessError once the cached status has expired"
+        except BusinessError:
+            pass
+
+        # A nonexistent outcome is cached as missing too — later calls don't hit Postgres.
+        for _ in range(2):
+            try:
+                record_odds_update_redis(999_999_999, Decimal("2.00"), T0, run_id)
+                assert False, "expected BusinessError for a nonexistent outcome"
+            except BusinessError:
+                pass
+        assert get_redis().get(outcome_status_key(999_999_999)) == "missing"
+
         print("test_odds_feed: all asserts passed")
     finally:
-        cleanup_redis(run_id)
+        cleanup_redis(run_id, outcome_id, closed_outcome_id, 999_999_999)

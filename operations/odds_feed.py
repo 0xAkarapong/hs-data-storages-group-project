@@ -23,6 +23,18 @@ def odds_accepted_key(run_id: str) -> str:
     return f"{SCHEMA_NAME or 'public'}:oddsfeed:{run_id}:accepted"
 
 
+# How long Path B trusts a cached outcome status. After settle_outcome() closes a
+# market, ticks can still be accepted for up to this long — harmless for odds
+# history, and place_bet() never reads this cache (it re-checks under a SQL lock).
+OUTCOME_STATUS_TTL_SECONDS = 5
+_MISSING = "missing"
+
+
+def outcome_status_key(outcome_id: int) -> str:
+    """Redis cache of Outcome.status for Path B's validation, namespaced by SCHEMA_NAME."""
+    return f"{SCHEMA_NAME or 'public'}:outcome:{outcome_id}:status"
+
+
 def ensure_latest_price_columns(engine: Engine) -> None:
     """Idempotent additive migration for the two latest-price cache columns — no CREATE SCHEMA privilege
     on the real RDS, so `outcomes` may already exist without them; call once after create_tables()."""
@@ -47,6 +59,20 @@ def _validate_open_outcome(s: Session, outcome_id: int) -> Outcome:
     return outcome
 
 
+def _validate_open_outcome_cached(outcome_id: int) -> None:
+    """Read-through cache: Redis first, Postgres only on a miss (once per outcome per TTL, not per
+    request). A nonexistent outcome is cached too, so bogus ids can't stampede Postgres."""
+    r = get_redis()
+    status = r.get(outcome_status_key(outcome_id))
+    if status is None:
+        with tx() as s:
+            db_status = s.scalar(select(Outcome.status).where(Outcome.outcome_id == outcome_id))
+        status = db_status.value if db_status else _MISSING
+        r.set(outcome_status_key(outcome_id), status, ex=OUTCOME_STATUS_TTL_SECONDS)
+    if status != OutcomeStatus.open.value:
+        raise BusinessError("outcome is not open")
+
+
 def _apply_latest_price(s: Session, outcome_id: int, price: Decimal, captured_at: dt.datetime) -> None:
     """Guarded by latest_captured_at so an out-of-order write can never roll the cached price backwards."""
     s.execute(
@@ -68,10 +94,10 @@ def record_odds_update(outcome_id: int, price: Decimal, captured_at: dt.datetime
 
 
 def record_odds_update_redis(outcome_id: int, price: Decimal, captured_at: dt.datetime, run_id: str) -> dict:
-    """NoSQL-boosted path (B): validate in SQL, then queue the write in Redis — INSERT/UPDATE deferred
-    to flush_odds_queue(). One pipelined round trip so the queue and the accepted counter can't drift."""
-    with tx() as s:
-        _validate_open_outcome(s, outcome_id)
+    """NoSQL-boosted path (B): validate against the Redis status cache, then queue the write in Redis —
+    INSERT/UPDATE deferred to flush_odds_queue(). No Postgres on the request path once the cache is warm.
+    One pipelined round trip for the write so the queue and the accepted counter can't drift."""
+    _validate_open_outcome_cached(outcome_id)
 
     payload = json.dumps({
         "outcome_id": outcome_id,
